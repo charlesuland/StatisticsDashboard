@@ -1,0 +1,32 @@
+Functional Requirements:
+  - Uploading .txt, .csv, .xlsx files
+    - need users to clarify which columns model should use.
+    - store this information in a database based on user
+  - User Authentication
+  - Single model evaluation.
+    - extendend to two model evaluation for comparison. 
+  - visulation of results
+
+Page 1:
+  Get Started - has a button that leads to login
+Page 2: 
+  Login
+Page 3:
+  Page 1:
+    User Dashboard Home
+  Page 2:
+    Upload Data Sets
+  Page 3: 
+    Page 1: 
+      Single Model Evaluation
+    Page 2:
+      Results
+  Page 4:
+    Page 1:
+      Comparison Model Evaluation
+    Page 2:
+      Results
+
+
+  
+  
