@@ -27,6 +27,11 @@ Page 3:
     Page 2:
       Results
 
-
-  
-  
+Implementation notes:
+  - This will be a single page application (SPA)
+  - Will use JWT for user auth and session tracking
+  - Frontend will be Vue.js
+  - Backend is fastAPI
+  - Python modules will be used in the backend for statistical analysis
+  - SQLAlchemy will be used as an ORM
+  - SQLite will be used as the DB
