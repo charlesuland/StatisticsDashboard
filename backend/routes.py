@@ -42,6 +42,8 @@ async def addUserDataSet(file: UploadFile = File(...)):
 
 @router.post("/dashboard/modelEvaluation")
 def modelEval():
+    # get necessary information from request
+        # need which model and which dataset
     #perform necessary python and sklearn calcualations
     # return that data
     # how do we want to visualize it?
