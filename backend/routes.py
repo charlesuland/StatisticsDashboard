@@ -50,7 +50,7 @@ async def addUserDataSet(file: UploadFile = File(...)):
         buffer.write(await file.read())
     return {"filename": file.filename, "message": "file uploaded successfully"}
 
-@router.post("/dashboard/modelEvaluation")
+@router.post("/dashboard/modelevaluation")
 async def modelEval(request: Request):
     # get necessary information from request
         # need which model and which dataset
@@ -58,13 +58,16 @@ async def modelEval(request: Request):
     # return that data
     # how do we want to visualize it?
     body = await request.json()
-    filename = body.filename
-    target = body.target
-    df = pd.read_csv(filename)
-    manager = MLManager(df)
-    result = manager.train_linear_regression(target)
-
-    return {"mse": result.mse}
+    filename = body["filename"]
+    target = body["target"]
+    features = body["features"]
+    test_split = body["test_split"]
+    file_path = os.path.join("uploads", filename)
+    df = pd.read_csv(file_path)
+    manager = MLManager(df, test_split)
+    result = manager.train_linear_regression(target, features)
+    print(result)
+    return 
 
 @router.get("/dashboard/datasets/columns")
 def get_columns(filename: str = ""):
