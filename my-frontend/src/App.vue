@@ -1,11 +1,24 @@
-<script setup></script>
+<script setup>
+import router from './router';
+import { computed } from "vue";
+import { useRoute } from 'vue-router';
+import Navbar from '../components/Navbar.vue';
+
+const route = useRoute();
+
+const showNavbar = true;//computed(() => route.path !== '/');
+</script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <Navbar v-if="showNavbar"/>
+  
+  <router-link to="/dashboard">Dashboard</router-link>
+
+  <main>
+    <router-view />
+  </main>
 </template>
 
-<style scoped></style>
+<style scoped>
+
+</style>
