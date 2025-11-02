@@ -4,7 +4,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
-class MLManager:
+class LinRegManager:
     def __init__(self, dataframe: pd.DataFrame, test_split):
         self.df = dataframe
         self.test_split = test_split / 100

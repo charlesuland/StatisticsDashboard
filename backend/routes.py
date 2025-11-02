@@ -4,8 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 import pandas as pd
-from ml.ml_manager import MLManager
-
+from backend import ml
 
 router = APIRouter()
 
@@ -136,10 +135,12 @@ async def modelEval(request: Request):
     target = body["target"]
     features = body["features"]
     test_split = body["test_split"]
+    model = body["model"]
+
     file_path = os.path.join("uploads", filename)
     df = pd.read_csv(file_path)
-    manager = MLManager(df, test_split)
-    result = manager.train_linear_regression(target, features)
+    manager = ml.models[model](df, test_split)
+    result = manager.train(target, features)
     print(result)
     return 
 
