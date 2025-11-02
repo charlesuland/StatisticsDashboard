@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 import pandas as pd
-from backend import ml
+import ml
 
 router = APIRouter()
 
