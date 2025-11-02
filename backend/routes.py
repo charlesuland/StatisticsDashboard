@@ -1,5 +1,10 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 import os
+
+import pandas as pd
+from ml.ml_manager import MLManager
+
 
 router = APIRouter()
 
@@ -28,24 +33,53 @@ def userDasboard():
 
 @router.get("/dashboard/datasets")
 def userDatasets():
-    return
+    print("routed up")
+    files = []
+    for filename in os.listdir("uploads"):
+        files.append(filename)
+    return {"files": files}
 
 @router.post("/dashboard/addDataSet")
 async def addUserDataSet(file: UploadFile = File(...)):
     os.makedirs("uploads", exist_ok=True)
+    
     #ultimately the file path needs to include the username
     # this is just showing the functionality of adding a file
     file_path = os.path.join("uploads", file.filename)
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
-    return
+    return {"filename": file.filename, "message": "file uploaded successfully"}
 
 @router.post("/dashboard/modelEvaluation")
-def modelEval():
+async def modelEval(request: Request):
     # get necessary information from request
         # need which model and which dataset
     #perform necessary python and sklearn calcualations
     # return that data
     # how do we want to visualize it?
-    return
+    body = await request.json()
+    filename = body.filename
+    target = body.target
+    df = pd.read_csv(filename)
+    manager = MLManager(df)
+    result = manager.train_linear_regression(target)
 
+    return {"mse": result.mse}
+
+@router.get("/dashboard/datasets/columns")
+def get_columns(filename: str = ""):
+    file_path = os.path.join("uploads", filename)
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File {filename} not found")
+
+    try:
+        
+        
+        df = pd.read_csv(file_path)
+        columns = df.columns.tolist()
+        return {"columns": columns}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading CSV: {str(e)}")

@@ -8,14 +8,24 @@
 
     <p v-if="uploadStatus">{{ uploadStatus }}</p>
   </div>
+
+  <div class="curr-datasets">
+    <h3>Current Datasets</h3>
+    <ul>
+        <li v-for="file in files">
+            {{ file }}
+        </li>
+    </ul>
+  </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const selectedFile = ref(null);
 const uploadStatus = ref('');
+const files = ref(null)
 
 function onFileChange(event) {
   selectedFile.value = event.target.files[0];
@@ -39,6 +49,22 @@ async function uploadFile() {
     console.error(error);
     uploadStatus.value = 'Upload failed';
   }
+  getDatasets();
+}
+onMounted(() => getDatasets());
+
+async function getDatasets() {
+    try {
+        const response = await axios.get(
+            'http://localhost:8000/dashboard/datasets',
+        );
+        files.value = response.data.files;
+        
+    }
+
+    catch (error) {
+        console.log(error);
+    }
 }
 </script>
 

@@ -2,7 +2,7 @@
 import router from './router';
 import { computed } from "vue";
 import { useRoute } from 'vue-router';
-import Navbar from '../components/Navbar.vue';
+import Navbar from './components/Navbar.vue';
 
 const route = useRoute();
 
