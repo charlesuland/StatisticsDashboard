@@ -32,7 +32,7 @@ models = {
 
 
 class ModelManager(metaclass=ABCMeta):
-    def __init__(self, dataframe: pd.DataFrame, test_split):
+    def __init__(self, dataframe: pd.DataFrame, test_split: int):
         self.df = dataframe
         self.test_split = test_split / 100
 
