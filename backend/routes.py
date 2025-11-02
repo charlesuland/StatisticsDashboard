@@ -41,7 +41,15 @@ def userDatasets():
 
 @router.post("/dashboard/addDataSet")
 async def addUserDataSet(file: UploadFile = File(...)):
+
+    _, ext = os.path.splitext(file.filename)
+    if ext.lower() not in [".txt", ".csv", ".xlsx"]:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed types: {', '.join([".txt", ".csv", ".xlsx"])}")
+
+
     os.makedirs("uploads", exist_ok=True)
+
+    
     
     #ultimately the file path needs to include the username
     # this is just showing the functionality of adding a file
