@@ -1,13 +1,14 @@
 from abc import ABCMeta, abstractmethod
-from linear_regression import LinRegManager
-from logistic_regression import LogRegManager
-from bagging import BaggingManager
-from boosting import BoostingManager
-from decision_tree import DecisionTreeManager
-from neural_net import NeuralNetManager
-from random_forest import RandForestManager
-from support_vector_machine import SVMManager
 import pandas as pd
+
+from .linear_regression import LinRegManager
+from .logistic_regression import LogRegManager
+from .bagging import BaggingManager
+from .boosting import BoostingManager
+from .decision_tree import DecisionTreeManager
+from .neural_net import NeuralNetManager
+from .random_forest import RandForestManager
+from .support_vector_machine import SVMManager
 
 # [x] linear regression
 # [ ] logistic regression
