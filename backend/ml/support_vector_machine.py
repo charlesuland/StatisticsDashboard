@@ -17,7 +17,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC, SVR
 
-from backend.ml import ModelManager
+from . import ModelManager
 
 
 class SVMManager(ModelManager):

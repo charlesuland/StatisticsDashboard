@@ -14,7 +14,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
-from backend.ml import ModelManager
+from . import ModelManager
 
 
 class LogRegManager(ModelManager):

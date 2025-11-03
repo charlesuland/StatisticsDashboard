@@ -10,9 +10,6 @@ from crud import get_user_by_username, create_user
 from auth import verify_password, create_access_token, decode_access_token
 from fastapi.security import OAuth2PasswordBearer
 
-
-
-
 router = APIRouter(
     prefix="/auth",
     tags=["auth"]

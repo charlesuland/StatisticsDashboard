@@ -18,7 +18,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 
-from backend.ml import ModelManager
+from . import ModelManager
 
 
 class NeuralNetManager(ModelManager):
