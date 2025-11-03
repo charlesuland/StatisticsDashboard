@@ -71,6 +71,7 @@ const selectedColumns = ref([])
 const testSplit = ref(20)
 const selectedDataset = ref("")
 const selectedModel = ref("")
+const token = localStorage.getItem("token"); 
 
 const canSubmit = computed(() => {
   return selectedModel.value && selectedDataset.value && selectedColumns.value.length > 0 && targetColumn.value;
@@ -80,8 +81,14 @@ const canSubmit = computed(() => {
 // Fetch the list of datasets from the backend on component mount
 async function fetchDatasets() {
   try {
+    
         const response = await axios.get(
             'http://localhost:8000/dashboard/datasets',
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`, // must be exactly like this
+                },
+            }
         );
         datasets.value = response.data.files;
   } catch (error) {
@@ -97,7 +104,11 @@ async function fetchColumns() {
             {
             params: {
                 filename: selectedDataset.value,  // key-value pair sent as query string 
-            }
+            },
+            headers: {
+                    Authorization: `Bearer ${token}`, // must be exactly like this
+                },
+            
   }
 );
         
@@ -126,7 +137,12 @@ async function submitOptions() {
 
     const response = await axios.post(
       "http://localhost:8000/dashboard/modelevaluation",
-      payload
+      payload,{
+      headers: {
+                    Authorization: `Bearer ${token}`, // must be exactly like this
+                },
+            },
+      
     );
 
     console.log("Backend response:", response.data);

@@ -26,6 +26,7 @@ import axios from 'axios';
 const selectedFile = ref(null);
 const uploadStatus = ref('');
 const files = ref(null)
+const token = localStorage.getItem("token"); 
 
 function onFileChange(event) {
   selectedFile.value = event.target.files[0];
@@ -38,10 +39,11 @@ async function uploadFile() {
   formData.append('file', selectedFile.value);
 
   try {
+    
     const response = await axios.post(
       'http://localhost:8000/dashboard/addDataSet',
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      { headers: { 'Content-Type': 'multipart/form-data',  Authorization: `Bearer ${token}`} }
     );
 
     uploadStatus.value = `Upload successful: ${response.data.filename}`;
@@ -55,9 +57,11 @@ onMounted(() => getDatasets());
 
 async function getDatasets() {
     try {
-        const response = await axios.get(
-            'http://localhost:8000/dashboard/datasets',
-        );
+        const response = await axios.get("http://localhost:8000/dashboard/datasets", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
         files.value = response.data.files;
         
     }
