@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ..ml import (
+from ml import (
     LinRegManager,
     LogRegManager,
     DecisionTreeManager,

@@ -1,5 +1,5 @@
 from typing import Any
-
+import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
@@ -14,7 +14,7 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold, cross_validate
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from . import ModelManager
@@ -29,6 +29,7 @@ class DecisionTreeManager(ModelManager):
         min_samples_split: int = 2,
         random_state: int = 42,
         classifier: bool = False,
+        cv_folds: int = 5,
     ):
         self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
@@ -36,10 +37,74 @@ class DecisionTreeManager(ModelManager):
         self.min_samples_split = min_samples_split
         self.random_state = random_state
         self.classifier = classifier
+        self.cv_folds = cv_folds
 
     def train(self, target, features):
         X = self.df[features].copy()
         y = self.df[target].copy()
+
+        # Cross-validation summary
+        if self.classifier:
+            scoring = {
+                "accuracy": "accuracy",
+                "precision": "precision_macro",
+                "recall": "recall_macro",
+                "f1": "f1_macro",
+                "roc_auc": "roc_auc",
+                "pr_auc": "average_precision",
+            }
+            cv = StratifiedKFold(
+                n_splits=self.cv_folds, shuffle=True, random_state=self.random_state
+            )
+            try:
+                cv_res = cross_validate(
+                    DecisionTreeClassifier(
+                        max_depth=self.max_depth,
+                        min_samples_split=self.min_samples_split,
+                        random_state=self.random_state,
+                    ),
+                    X,
+                    y,
+                    cv=cv,
+                    scoring=scoring,
+                )
+                cv_mean = {k + "_mean": float(np.mean(cv_res[f"test_{k}"])) for k in scoring}
+                cv_std = {k + "_std": float(np.std(cv_res[f"test_{k}"])) for k in scoring}
+            except Exception:
+                cv_mean = {}
+                cv_std = {}
+        else:
+            scoring = {
+                "r2": "r2",
+                "neg_mse": "neg_mean_squared_error",
+                "neg_mae": "neg_mean_absolute_error",
+            }
+            cv = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
+            try:
+                cv_res = cross_validate(
+                    DecisionTreeRegressor(
+                        max_depth=self.max_depth,
+                        min_samples_split=self.min_samples_split,
+                        random_state=self.random_state,
+                    ),
+                    X,
+                    y,
+                    cv=cv,
+                    scoring=scoring,
+                )
+                cv_mean = {
+                    "r2_mean": float(np.mean(cv_res["test_r2"])),
+                    "mse_mean": float(-np.mean(cv_res["test_neg_mse"])),
+                    "mae_mean": float(-np.mean(cv_res["test_neg_mae"])),
+                }
+                cv_std = {
+                    "r2_std": float(np.std(cv_res["test_r2"])),
+                    "mse_std": float(np.std(cv_res["test_neg_mse"])),
+                    "mae_std": float(np.std(cv_res["test_neg_mae"])),
+                }
+            except Exception:
+                cv_mean = {}
+                cv_std = {}
 
         X_train, X_test, y_train, y_test = train_test_split(
             X,
@@ -79,6 +144,21 @@ class DecisionTreeManager(ModelManager):
                     "precision": precision.tolist(),
                     "recall": recall.tolist(),
                 }
+            result["cv_mean"] = cv_mean
+            result["cv_std"] = cv_std
+            try:
+                eval_artifacts = self.evaluate_model(
+                    model,
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    is_classifier=True,
+                    feature_names=features,
+                )
+                result.update(eval_artifacts)
+            except Exception:
+                pass
             return result
         else:
             model = DecisionTreeRegressor(
@@ -89,8 +169,24 @@ class DecisionTreeManager(ModelManager):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
-            return {
+            result: dict[str, Any] = {
                 "r2": float(r2_score(y_test, y_pred)),
                 "mse": float(mean_squared_error(y_test, y_pred)),
                 "mae": float(mean_absolute_error(y_test, y_pred)),
             }
+            result["cv_mean"] = cv_mean
+            result["cv_std"] = cv_std
+            try:
+                eval_artifacts = self.evaluate_model(
+                    model,
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    is_classifier=False,
+                    feature_names=features,
+                )
+                result.update(eval_artifacts)
+            except Exception:
+                pass
+            return result

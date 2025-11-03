@@ -1,8 +1,16 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Optional
 
+import numpy as np
 import pandas as pd
 import pandas.api.types as ptypes
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import learning_curve
+
+try:
+    import shap  # optional
+except Exception:
+    shap = None
 
 
 class ModelManager(metaclass=ABCMeta):
@@ -14,7 +22,9 @@ class ModelManager(metaclass=ABCMeta):
     def train(self, target, features, *args, **kwargs) -> dict[str, Any]:
         pass
 
-    def sanitize(self, df: Optional[pd.DataFrame] = None, drop_threshold: float = 0.5) -> pd.DataFrame:
+    def sanitize(
+        self, df: Optional[pd.DataFrame] = None, drop_threshold: float = 0.5
+    ) -> pd.DataFrame:
         if df is None:
             # if called before self.df exists, just return an empty DataFrame defensive
             df = getattr(self, "df", pd.DataFrame())
@@ -55,11 +65,18 @@ class ModelManager(metaclass=ABCMeta):
 
         # Ensure datetime columns are native numpy datetime64[ns]
         for col in df.columns:
-            if ptypes.is_datetime64_any_dtype(df[col]) or ptypes.is_datetime64tz_dtype(df[col]):
+            if ptypes.is_datetime64_any_dtype(df[col]) or ptypes.is_datetime64tz_dtype(
+                df[col]
+            ):
                 df[col] = pd.to_datetime(df[col], errors="coerce", utc=False)
 
         # Convert datetime columns to numeric epoch seconds to avoid dtype mixing
-        datetime_cols = [c for c in df.columns if ptypes.is_datetime64_any_dtype(df[c]) or ptypes.is_datetime64tz_dtype(df[c])]
+        datetime_cols = [
+            c
+            for c in df.columns
+            if ptypes.is_datetime64_any_dtype(df[c])
+            or ptypes.is_datetime64tz_dtype(df[c])
+        ]
         for c in datetime_cols:
             # astype('int64') gives ns since epoch; convert to seconds as float64
             try:
@@ -73,7 +90,9 @@ class ModelManager(metaclass=ABCMeta):
         # Normalize numeric dtypes to float64 to avoid nullable-int / float promotion issues
         num_cols = [c for c in df.columns if ptypes.is_numeric_dtype(df[c])]
         if num_cols:
-            df[num_cols] = df[num_cols].apply(pd.to_numeric, errors="coerce").astype("float64")
+            df[num_cols] = (
+                df[num_cols].apply(pd.to_numeric, errors="coerce").astype("float64")
+            )
 
         # Fill numeric NaNs with column mean (after conversion to float64)
         for col in num_cols:
@@ -87,3 +106,144 @@ class ModelManager(metaclass=ABCMeta):
         # Reset index and return
         df = df.reset_index(drop=True)
         return df
+
+    def evaluate_model(
+        self,
+        model,
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        is_classifier: bool = True,
+        feature_names: list | None = None,
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+
+        # Confusion matrix for classifiers
+        if is_classifier:
+            try:
+                y_pred = model.predict(X_test)
+                cm = confusion_matrix(y_test, y_pred).tolist()
+                out["confusion_matrix"] = cm
+            except Exception:
+                pass
+
+            # ROC / PR if probabilities or decision_function
+            y_proba = None
+            try:
+                if hasattr(model, "predict_proba"):
+                    y_proba = model.predict_proba(X_test)
+                    # if multiclass, leave full array; we compute only binary if possible
+                elif hasattr(model, "decision_function"):
+                    # try to convert decision_function output to probabilities via minmax
+                    df = model.decision_function(X_test)
+                    # if binary, df is shape (n,) else (n, n_classes)
+                    if df.ndim == 1:
+                        # scale to 0-1
+                        from sklearn.preprocessing import MinMaxScaler
+
+                        scaler = MinMaxScaler()
+                        y_proba = scaler.fit_transform(df.reshape(-1, 1))
+                # compute ROC/PR for binary case
+                if y_proba is not None:
+                    # pick column 1 when binary
+                    if y_proba.ndim == 2 and y_proba.shape[1] >= 2:
+                        scores = y_proba[:, 1]
+                    else:
+                        scores = y_proba.ravel()
+                    from sklearn.metrics import (
+                        average_precision_score,
+                        precision_recall_curve,
+                        roc_auc_score,
+                        roc_curve,
+                    )
+
+                    fpr, tpr, _ = roc_curve(y_test, scores)
+                    prec, rec, _ = precision_recall_curve(y_test, scores)
+                    out["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+                    out["pr_curve"] = {
+                        "precision": prec.tolist(),
+                        "recall": rec.tolist(),
+                    }
+                    try:
+                        out["roc_auc"] = float(roc_auc_score(y_test, scores))
+                        out["pr_auc"] = float(average_precision_score(y_test, scores))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Feature importances / coefficients
+        try:
+            if hasattr(model, "feature_importances_"):
+                importances = getattr(model, "feature_importances_")
+                names = feature_names or [f"f{i}" for i in range(len(importances))]
+                out["feature_importance"] = [
+                    {"name": n, "importance": float(v)}
+                    for n, v in zip(names, importances)
+                ]
+            elif hasattr(model, "coef_"):
+                coef = getattr(model, "coef_")
+                # handle multiclass & reshape to 1D by absolute sum
+                if coef.ndim == 1:
+                    names = feature_names or [f"f{i}" for i in range(len(coef))]
+                    out["feature_importance"] = [
+                        {"name": n, "importance": float(abs(v))}
+                        for n, v in zip(names, coef)
+                    ]
+                else:
+                    # multiclass: sum abs across classes
+                    agg = np.sum(np.abs(coef), axis=0)
+                    names = feature_names or [f"f{i}" for i in range(len(agg))]
+                    out["feature_importance"] = [
+                        {"name": n, "importance": float(v)} for n, v in zip(names, agg)
+                    ]
+        except Exception:
+            pass
+
+        # Learning curve (quick hold-out sized learning curve)
+        try:
+            train_sizes, train_scores, test_scores = learning_curve(
+                model,
+                np.vstack([X_train, X_test]),
+                np.concatenate([y_train, y_test]),
+                train_sizes=np.linspace(0.1, 1.0, 5),
+                cv=3,
+                scoring=None,
+                n_jobs=1,
+                shuffle=True,
+                random_state=42,
+                return_times=False,
+            )
+            out["learning_curve"] = {
+                "train_sizes": train_sizes.tolist(),
+                "train_scores_mean": np.mean(train_scores, axis=1).tolist(),
+                "test_scores_mean": np.mean(test_scores, axis=1).tolist(),
+            }
+        except Exception:
+            pass
+
+        # SHAP values (optional and expensive)
+        if shap is not None:
+            try:
+                explainer = None
+                # TreeExplainer for tree-based models
+                if hasattr(shap, "TreeExplainer") and hasattr(
+                    model, "feature_importances_"
+                ):
+                    explainer = shap.TreeExplainer(model)
+                else:
+                    explainer = shap.Explainer(model, X_train)
+                sv = explainer(X_test)
+                # convert a reduced summary: mean abs shap per feature
+                mean_abs = np.mean(np.abs(sv.values), axis=0)
+                names = feature_names or [f"f{i}" for i in range(len(mean_abs))]
+                out["shap_summary"] = [
+                    {"name": n, "mean_abs_shap": float(v)}
+                    for n, v in zip(names, mean_abs)
+                ]
+            except Exception:
+                # ignore shap failures
+                pass
+
+        return out

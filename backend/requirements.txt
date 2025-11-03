@@ -3,3 +3,6 @@ uvicorn
 python-multipart
 sqlalchemy
 python-jose
+shap
+sklearn
+matplotlib

@@ -1,6 +1,6 @@
 # models.py
 import time
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, LargeBinary
 from database import Base
 from sqlalchemy.orm import relationship
 
@@ -138,3 +138,14 @@ class UserDefinedDNNModel(Base):
     created_at = Column(DateTime, default=time.time())
 
     user = relationship("User", back_populates="user_defined_dnn_models")
+
+# New model to store server-rendered plots as binary blobs
+class Plot(Base):
+    __tablename__ = "plots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(Integer, ForeignKey("datasets.id"), index=True)
+    name = Column(String, index=True)  # e.g., "roc_curve", "confusion_matrix"
+    image = Column(LargeBinary)  # PNG bytes
+
+    dataset = relationship("Dataset", back_populates="plots")
