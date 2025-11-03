@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from typing import Any
 import pandas as pd
 
 from .linear_regression import LinRegManager
@@ -38,5 +39,5 @@ class ModelManager(metaclass=ABCMeta):
         self.test_split = test_split / 100
 
     @abstractmethod
-    def train(self, target, features, *args, **kwargs):
+    def train(self, target, features, *args, **kwargs) -> dict[str, Any]:
         pass

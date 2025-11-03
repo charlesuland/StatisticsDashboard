@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
@@ -24,6 +24,7 @@ class LinRegManager:
         y_pred = model.predict(X_test)
 
         return {
-            "r2_score": r2_score(y_test, y_pred),
-            "mse": mean_squared_error(y_test, y_pred),
+            "r2": float(r2_score(y_test, y_pred)),
+            "mse": float(mean_squared_error(y_test, y_pred)),
+            "mae": float(mean_absolute_error(y_test, y_pred)),
         }

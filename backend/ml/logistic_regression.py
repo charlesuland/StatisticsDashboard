@@ -1,6 +1,15 @@
-from typing import Literal
+from typing import Any, Literal
 import pandas as pd
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    average_precision_score,
+    roc_curve,
+    precision_recall_curve,
+)
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
@@ -29,7 +38,7 @@ class LogRegManager:
         y = self.df[target].copy()
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=self.test_split, random_state=42
+            X, y, test_size=self.test_split, random_state=42, stratify=y
         )
 
         model = LogisticRegression(
@@ -38,7 +47,29 @@ class LogRegManager:
             solver=self.solver,
             max_iter=self.max_iter,
         )
+
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
+        y_proba = None
+        try:
+            y_proba = model.predict_proba(X_test)[:, 1]
+        except Exception:
+            y_proba = None
 
-        return {"accuracy": accuracy_score(y_test, y_pred)}
+        result: dict[str, Any] = {
+            "accuracy": float(accuracy_score(y_test, y_pred)),
+            "precision": float(precision_score(y_test, y_pred, average="macro")),
+            "recall": float(recall_score(y_test, y_pred, average="macro")),
+            "f1": float(f1_score(y_test, y_pred, average="macro")),
+        }
+        if y_proba is not None:
+            result["roc_auc"] = float(roc_auc_score(y_test, y_proba))
+            result["pr_auc"] = float(average_precision_score(y_test, y_proba))
+            fpr, tpr, _ = roc_curve(y_test, y_proba)
+            precision, recall, _ = precision_recall_curve(y_test, y_proba)
+            result["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+            result["pr_curve"] = {
+                "precision": precision.tolist(),
+                "recall": recall.tolist(),
+            }
+        return result

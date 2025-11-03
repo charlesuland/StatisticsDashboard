@@ -7,12 +7,14 @@
 `random_state` (default: 42) - rng state for reproducability
 
 General I/O contract:
-- Regressors return: `{"r2_score": float, "mse": float}`
-- Classifiers return: `{"accuracy": float}`
+- Regressors return: `{"r2_score": float, "mse": float, "mae": float}`
+- Classifiers return: `{"accuracy": float, "precision": float, "recall": float, "f1": float}`
+  - If needed, they also return (in the same dictionary): `{"roc_auc": float, "pr_auc": float, "roc_curve": {"fpr": [...], "tpr": [...]}, "pr_curve": {"precision": [...], "recall": [...]}}`
 - All managers expose `train(target, features)` which: splits data using `test_split`, fits the estimator, predicts on the test set, and returns metrics.
 
 **TODO**
-> includes accuracy, precision, recall, F1, ROC-AUC (with curve), PR-AUC when class imbalance; regression metrics where applicable (MSE/MAE/R²); clear cross-validation or hold-out; ranked leaderboard with statistical context (e.g., mean±std over folds).
+cross-validation
+
 ---
 
 ## Linear Regression - LinRegManager

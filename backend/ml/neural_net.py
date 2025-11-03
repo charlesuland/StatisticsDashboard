@@ -1,6 +1,18 @@
-from typing import Literal
+from typing import Any, Literal
 import pandas as pd
-from sklearn.metrics import r2_score, mean_squared_error, accuracy_score
+from sklearn.metrics import (
+    r2_score,
+    mean_squared_error,
+    mean_absolute_error,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    average_precision_score,
+    roc_curve,
+    precision_recall_curve,
+)
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.model_selection import train_test_split
 
@@ -15,7 +27,7 @@ class NeuralNetManager:
         hidden_layer_sizes: ArrayLike = [100],
         activation: Literal["relu", "identity", "logistic", "tanh"] = "relu",
         solver: Literal["lbfgs", "sgd", "adam"] = "adam",
-        lr: float = .001,
+        lr: float = 0.001,
         max_iter: int = 500,
         random_state: int = 42,
         classifier: bool = False,
@@ -35,7 +47,11 @@ class NeuralNetManager:
         y = self.df[target].copy()
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=self.test_split, random_state=self.random_state
+            X,
+            y,
+            test_size=self.test_split,
+            random_state=self.random_state,
+            stratify=y if self.classifier else None,
         )
 
         if self.classifier:
@@ -47,6 +63,31 @@ class NeuralNetManager:
                 learning_rate_init=self.lr,
                 random_state=self.random_state,
             )
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            y_proba = None
+            try:
+                y_proba = model.predict_proba(X_test)[:, 1]
+            except Exception:
+                y_proba = None
+
+            result: dict[str, Any] = {
+                "accuracy": float(accuracy_score(y_test, y_pred)),
+                "precision": float(precision_score(y_test, y_pred, average="macro")),
+                "recall": float(recall_score(y_test, y_pred, average="macro")),
+                "f1": float(f1_score(y_test, y_pred, average="macro")),
+            }
+            if y_proba is not None:
+                result["roc_auc"] = float(roc_auc_score(y_test, y_proba))
+                result["pr_auc"] = float(average_precision_score(y_test, y_proba))
+                fpr, tpr, _ = roc_curve(y_test, y_proba)
+                precision, recall, _ = precision_recall_curve(y_test, y_proba)
+                result["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+                result["pr_curve"] = {
+                    "precision": precision.tolist(),
+                    "recall": recall.tolist(),
+                }
+            return result
         else:
             model = MLPRegressor(
                 hidden_layer_sizes=self.hidden_layer_sizes,
@@ -54,10 +95,13 @@ class NeuralNetManager:
                 solver=self.solver,
                 max_iter=self.max_iter,
                 learning_rate_init=self.lr,
+                random_state=self.random_state,
             )
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
 
-        if self.classifier:
-            return {"accuracy": accuracy_score(y_test, y_pred)}
-        return {"r2_score": r2_score(y_test, y_pred), "mse": mean_squared_error(y_test, y_pred)}
+            return {
+                "r2": float(r2_score(y_test, y_pred)),
+                "mse": float(mean_squared_error(y_test, y_pred)),
+                "mae": float(mean_absolute_error(y_test, y_pred)),
+            }
