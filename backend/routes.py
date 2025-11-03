@@ -13,11 +13,7 @@ import pandas as pd
 from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
-<<<<<<< HEAD
 from models import BaggingModel, BoostingModel, Dataset, DecisionTreeModel, LinearRegressionModel, LogisticRegressionModel, RandomForestModel, SVMModel, User, UserDefinedDNNModel
-=======
-from models import Dataset, User, Plot
->>>>>>> be56350e520610d0d717723af99c49930bfd2e79
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -218,7 +214,7 @@ async def model_eval(
     db.refresh(model_entry)
 
     # Return the result to the frontend
-        raise HTTPException(status_code=404, detail="Processed file not found")
+    # raise HTTPException(status_code=404, detail="Processed file not found")
 
     df = pd.read_csv(file_path)
     manager = ml.models[model](df, test_split, **model_params)
