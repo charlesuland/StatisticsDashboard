@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import io
 import matplotlib
+from pydantic import BaseModel
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
 from models import Dataset, DefaultModel, Plot, User
+from typing import List
 
 router = APIRouter()
 
@@ -45,9 +47,11 @@ def userDasboard():
     #give the information needed for the user dashboard
     return
 
-# List datasets for current user
+
+
+
 @router.get("/dashboard/datasets")
-def get_user_datasets(current_user: User = Depends(get_current_user), db: SessionLocal = Depends(get_db)):
+def get_user_datasets(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     datasets = db.query(Dataset).filter(Dataset.owner_id == current_user.id).all()
     return {"files": [d.filename for d in datasets]}
 
@@ -200,7 +204,7 @@ async def model_eval(
         dataset=filename,
         model_type=model_name,
         parameters=model_params,
-        metrics=result.get("metrics", {}),
+        metrics=result,
         
         created_at=datetime.datetime.utcnow()
     )
@@ -379,16 +383,27 @@ def fetch_models(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")
+
+
+
+
+
+
 @router.get("/dashboard/compare_models")
-def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def compare_models(
+    model_ids:  List[int] = Query(), 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user)
+):
     """
-    Compare two models by their primary key IDs.
-    Returns config, metrics, training time, and model type for each.
+    Compare two models by their IDs.
+    Returns a list of model data suitable for frontend display.
     """
     if len(model_ids) != 2:
         raise HTTPException(status_code=400, detail="Must provide exactly 2 model IDs")
 
-    results = []
+    models_data = []
+
     for model_id in model_ids:
         model = (
             db.query(DefaultModel)
@@ -398,17 +413,15 @@ def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_
         if not model:
             raise HTTPException(status_code=404, detail=f"Model with ID {model_id} not found for user")
 
-        results.append({
+        models_data.append({
             "model_id": model.id,
-            
-            "model_type": model.model_type,      # e.g., "linear_regression", "decision_tree"
-            "training_time": model.training_time,
-            "config": model.config,              # stored JSON/dict
-            "metrics": model.metrics,            # stored JSON/dict
-                 
+            "model_type": model.model_type,
+            "config": model.parameters,      # dict/json
+            "metrics": model.metrics     # dict/json
         })
 
-    return {"dataset1": results[0], "dataset2": results[1]}
+    return models_data  # <-- return as list instead of dataset1/dataset2
+
 
 
 @router.get("/dashboard/plot/{plot_id}")

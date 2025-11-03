@@ -1,78 +1,90 @@
 <template>
-  <div>
-    <!-- Dataset selection -->
-    <label for="dataset-select">Choose a dataset:</label>
-    <select id="dataset-select" v-model="selectedDataset" @change="onDatasetChange">
-      <option disabled value="">-- select a dataset --</option>
-      <option v-for="dataset in datasets" :key="dataset" :value="dataset">
-        {{ dataset }}
-      </option>
-    </select>
-
-    <!-- Model selection -->
-    <div v-if="availableModels.length > 0">
-      <label for="model-select">Select two models to compare:</label>
-      <select id="model-select" v-model="selectedModels" multiple>
-        <option v-for="model in availableModels" :key="model" :value="model">
-          {{ model }}
+  <div class="compare-page">
+    <!-- Dataset Selection -->
+    <div class="card">
+      <h2>Select Dataset</h2>
+      <select v-model="selectedDataset" @change="onDatasetChange">
+        <option disabled value="">-- choose dataset --</option>
+        <option v-for="dataset in datasets" :key="dataset" :value="dataset">
+          {{ dataset }}
         </option>
       </select>
     </div>
 
-    <button @click="compareModels" :disabled="selectedModels.length !== 2">
-      Compare Models
-    </button>
+    <!-- Model Selection -->
+    <div class="card" v-if="availableModels.length">
+      <h2>Select Two Models to Compare</h2>
+          <select v-model="selectedModels" multiple>
+      <option v-for="model in availableModels" :key="model" :value="model">
+        {{ model }}
+      </option>
+    </select>
+      <button @click="compareModels" :disabled="selectedModels.length !== 2">
+        Compare Models
+      </button>
+    </div>
 
-    <!-- Results -->
-    <div v-if="comparisonResult && comparisonResult.length">
-      <h3>Model Comparison for Dataset: {{ selectedDataset }}</h3>
-
-      <div
-        v-for="(model, index) in comparisonResult"
-        :key="index"
-        class="model-comparison"
-      >
-        <h4>
-          Model {{ index + 1 }} ({{ model.model_type }} - ID: {{ model.model_id }})
-        </h4>
-        <p><strong>Training Time:</strong> {{ model.training_time }} seconds</p>
-
-        <div>
-          <strong>Configuration:</strong>
-          <ul>
-            <li v-for="(value, key) in model.config" :key="key">
-              {{ key }}: {{ value }}
-            </li>
-          </ul>
+    <!-- Comparison Results -->
+    <div class="comparison-results" v-if="comparisonResult.length === 2">
+      <h2>Model Comparison for Dataset: {{ selectedDataset }}</h2>
+      <div class="columns">
+        <!-- Column for Model 1 -->
+        <div class="model-column">
+          <h3>Model 1: {{ comparisonResult[0].model_type }} (ID: {{ comparisonResult[0].model_id }})</h3>
+          <div>
+            <strong>Configuration:</strong>
+            <ul>
+              <li v-for="(value, key) in comparisonResult[0].config" :key="key">
+                {{ formatKey(key) }}: {{ value }}
+              </li>
+            </ul>
+          </div>
+          <div>
+            <strong>Metrics:</strong>
+            <ul>
+              <li v-for="(value, key) in comparisonResult[0].metrics" :key="key">
+                {{ formatKey(key) }}: {{ value }}
+              </li>
+            </ul>
+          </div>
         </div>
 
-        <div>
-          <strong>Metrics:</strong>
-          <ul>
-            <li v-for="(value, key) in model.metrics" :key="key">
-              {{ key }}: {{ value }}
-            </li>
-          </ul>
+        <!-- Column for Model 2 -->
+        <div class="model-column">
+          <h3>Model 2: {{ comparisonResult[1].model_type }} (ID: {{ comparisonResult[1].model_id }})</h3>
+          
+          <div>
+            <strong>Configuration:</strong>
+            <ul>
+              <li v-for="(value, key) in comparisonResult[1].config" :key="key">
+                {{ formatKey(key) }}: {{ value }}
+              </li>
+            </ul>
+          </div>
+          <div>
+            <strong>Metrics:</strong>
+            <ul>
+              <li v-for="(value, key) in comparisonResult[1].metrics" :key="key">
+                {{ formatKey(key) }}: {{ value }}
+              </li>
+            </ul>
+          </div>
         </div>
-
-        <hr />
       </div>
     </div>
   </div>
 </template>
 
-
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import axios from 'axios'
+import { ref, onMounted } from "vue";
+import axios from "axios";
 
-const datasets = ref([])
-const selectedDataset = ref("")
-const token = localStorage.getItem("token") // JWT from login
-const availableModels = ref([])
-const selectedModels = ref([])
-const comparisonResult = ref(null)
-
+const datasets = ref([]);
+const selectedDataset = ref("");
+const token = localStorage.getItem("token");
+const availableModels = ref([]);
+const selectedModels = ref([]);
+const comparisonResult = ref([]);
 
 // Fetch datasets
 async function fetchDatasets() {
@@ -86,7 +98,7 @@ async function fetchDatasets() {
   }
 }
 
-// Fetch available models for selected dataset
+// Fetch available models when dataset changes
 async function onDatasetChange() {
   if (!selectedDataset.value) return;
   try {
@@ -95,33 +107,116 @@ async function onDatasetChange() {
       headers: { Authorization: `Bearer ${token}` },
     });
     availableModels.value = response.data.models;
-    selectedModels.value = []; // reset selection
+    console.log(availableModels.value);
+    selectedModels.value = [];
   } catch (error) {
     console.error("Failed to fetch models:", error);
   }
 }
 
-// Compare two selected models
+// Compare selected models
 async function compareModels() {
-  if (selectedModels.value.length !== 2) {
-    alert("Please select exactly two models to compare.");
-    return;
-  }
+  if (selectedModels.value.length !== 2) return;
 
   try {
-    // Extract only the IDs (e.g., from "LinearRegression_3" → 3)
-    const modelIds = selectedModels.value.map((m) => parseInt(m.split("_").pop()));
+    const modelIds = selectedModels.value.map(m => parseInt(m.split("_").pop()));
 
-    const response = await axios.get("http://localhost:8000/dashboard/compare_models", {
-      params: { model_ids: modelIds },
-      headers: { Authorization: `Bearer ${token}` },
-    });
+const baseUrl = "http://localhost:8000/dashboard/compare_models";
 
-    comparisonResult.value = [response.data.dataset1, response.data.dataset2];
+// Use URLSearchParams to correctly handle encoding and the multiple keys
+const params = new URLSearchParams();
+modelIds.forEach(id => {
+    params.append('model_ids', id);
+});
+
+// Construct the final URL
+const url = `${baseUrl}?${params.toString()}`;
+// url will be: "http://localhost:8000/dashboard/compare_models?model_ids=3&model_ids=5"
+
+axios.get(url, {
+  headers: {
+    Authorization: `Bearer ${localStorage.getItem("token")}`
+  }
+})
+.then(res => {
+  comparisonResult.value = res.data
+})
+.catch(err => console.error(err))
+
   } catch (error) {
     console.error("Failed to compare models:", error);
   }
 }
 
+// Utility to prettify keys
+const formatKey = (key) => key.replace(/_/g, " ").toUpperCase();
+
 onMounted(fetchDatasets);
 </script>
+
+<style scoped>
+.compare-page {
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+select {
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 1em;
+}
+
+button {
+  margin-top: 10px;
+  padding: 10px 20px;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+
+.comparison-results {
+  margin-top: 20px;
+}
+
+.columns {
+  display: flex;
+  gap: 20px;
+}
+
+.model-column {
+  flex: 1;
+  background: #f4f6f8;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.model-column h3 {
+  margin-bottom: 10px;
+}
+
+.model-column ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.model-column ul li {
+  margin-bottom: 5px;
+}
+</style>
