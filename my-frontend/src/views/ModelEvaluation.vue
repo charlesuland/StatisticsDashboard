@@ -148,13 +148,13 @@
         </div>
       </section>
 
-      <!-- Plots -->
-      <section v-if="modelResults.plots && modelResults.plots.length">
-        <h3>Generated Plots</h3>
+      <!-- Client-side Plots -->
+      <section v-if="modelResults.plot_data && modelResults.plot_data.length">
+        <h3>Client-side Plots</h3>
         <div class="plots">
-          <div v-for="plot in modelResults.plots" :key="plot.id" class="plot-card">
-            <p>{{ plot.name }}</p>
-            <img :src="plot.url" alt="Plot image" />
+          <div v-for="(pd, idx) in modelResults.plot_data" :key="pd.key" class="plot-card">
+            <p>{{ pd.name }}</p>
+            <div :id="'plot-' + idx" class="plot-div"></div>
           </div>
         </div>
       </section>
@@ -321,9 +321,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 
 <script setup>
-import { ref, onMounted, computed, reactive, watch } from "vue";
+import { ref, onMounted, computed, reactive, watch, nextTick } from "vue";
 import axios from "axios";
 import Chart from "chart.js/auto";
+import Plotly from 'plotly.js-dist-min';
 
 const learningChart = ref(null);
 // Reactive state
@@ -500,12 +501,66 @@ async function submitOptions() {
 
       // Now assign to reactive modelResults
       modelResults.value = results;
+        // Render client-side plots from structured numeric data
+        if (modelResults.value.plot_data && modelResults.value.plot_data.length) {
+          await nextTick();
+          modelResults.value.plot_data.forEach((pd, idx) => {
+            try {
+              renderPlot(pd, idx);
+            } catch (e) {
+              console.error('Failed to render plot', pd.key, e);
+            }
+          });
+        }
       // Fetch plot images for each plot in results
     }
   } catch (error) {
     console.error("Failed to submit options:", error);
   }
 };
+
+  function renderPlot(pd, idx) {
+    const el = document.getElementById('plot-' + idx);
+    if (!el) return;
+
+    const type = pd.type;
+    let data = [];
+    let layout = {margin: {t: 30, b: 40}, autosize: true};
+
+    if (type === 'roc') {
+      data = [
+        { x: pd.data.fpr, y: pd.data.tpr, mode: 'lines', name: `ROC (AUC=${pd.data.auc || 'n/a'})` },
+        { x: [0,1], y: [0,1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false }
+      ];
+      layout.xaxis = { title: 'FPR' };
+      layout.yaxis = { title: 'TPR' };
+    } else if (type === 'pr') {
+      data = [ { x: pd.data.recall, y: pd.data.precision, mode: 'lines', name: `PR (AP=${pd.data.ap || 'n/a'})` } ];
+      layout.xaxis = { title: 'Recall' };
+      layout.yaxis = { title: 'Precision' };
+    } else if (type === 'confusion_matrix') {
+      data = [ { z: pd.data.matrix, type: 'heatmap', colorscale: 'Blues' } ];
+      layout.xaxis = { title: 'Predicted' };
+      layout.yaxis = { title: 'Actual' };
+    } else if (type === 'learning_curve') {
+      data = [
+        { x: pd.data.train_sizes, y: pd.data.train_scores_mean, mode: 'lines+markers', name: 'Train' },
+        { x: pd.data.train_sizes, y: pd.data.test_scores_mean, mode: 'lines+markers', name: 'Test' }
+      ];
+      layout.xaxis = { title: 'Training Samples' };
+      layout.yaxis = { title: 'Score' };
+    } else if (type === 'feature_importance' || type === 'shap_summary') {
+      const names = pd.data.map(d => d.name);
+      const vals = pd.data.map(d => d.importance ?? d.mean_abs_shap ?? d.value ?? 0);
+      data = [ { x: vals.reverse(), y: names.reverse(), type: 'bar', orientation: 'h' } ];
+      layout.xaxis = { title: type === 'shap_summary' ? 'Mean |SHAP value|' : 'Importance' };
+    } else {
+      el.innerText = 'Unsupported plot type: ' + type;
+      return;
+    }
+
+    Plotly.newPlot(el, data, layout, {responsive: true});
+  }
 
 // Watch for model change and reset params
 watch(selectedModel, (newModel) => {

@@ -6,7 +6,7 @@ import Navbar from './components/Navbar.vue';
 
 const route = useRoute();
 
-const showNavbar = false;//computed(() => route.path !== '/' && route.path !== '/login');
+const showNavbar = computed(() => route.path !== '/' && route.path !== '/login');
 </script>
 
 <template>

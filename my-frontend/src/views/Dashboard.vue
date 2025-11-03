@@ -1,15 +1,5 @@
 <template>
   <div class="dashboard-container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <h2>Statistics Dashboard</h2>
-      <nav>
-        <router-link to="/dashboard/datasets" class="nav-link">Datasets</router-link>
-        <router-link to="/dashboard/modelevaluation" class="nav-link">Model Evaluation</router-link>
-        <router-link to="/dashboard/comparemodels" class="nav-link">Compare Models</router-link>
-      </nav>
-    </aside>
-
     <!-- Main Content -->
     <main class="main-content">
       <header class="header">
@@ -32,35 +22,6 @@
   font-family: 'Arial', sans-serif;
 }
 
-/* Sidebar styling */
-.sidebar {
-  width: 250px;
-  background-color: #2c3e50;
-  color: #ecf0f1;
-  display: flex;
-  flex-direction: column;
-  padding: 30px 20px;
-}
-
-.sidebar h2 {
-  font-size: 1.8em;
-  margin-bottom: 40px;
-  text-align: center;
-}
-
-.nav-link {
-  display: block;
-  color: #ecf0f1;
-  text-decoration: none;
-  padding: 12px 15px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  transition: background 0.3s;
-}
-
-.nav-link:hover {
-  background-color: #34495e;
-}
 
 /* Main content styling */
 .main-content {

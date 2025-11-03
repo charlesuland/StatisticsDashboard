@@ -4,10 +4,7 @@ import json
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import os
-import io
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+
 from sqlalchemy.orm import Session
 import pandas as pd
 from auth_routes import get_current_user
@@ -164,7 +161,7 @@ async def model_eval(
     filename = body.get("filename")
     target = body.get("target")
     features = body.get("features")
-    test_split = body.get("test_split")
+    test_split = float(body.get("test_split"))
     model_name = body.get("model")
 
     model_params = body.get("params", {})  # hyperparameters
@@ -221,113 +218,103 @@ async def model_eval(
         db.commit()
         db.refresh(dataset)
 
-    saved_plots = []
+    # Instead of rendering and storing server-side PNGs, return structured numeric
+    # plot data to the frontend so the client can render plots. Keep `plots` empty
+    # for backwards compatibility and add `plot_data` with typed descriptors.
+    plot_data = []
 
-    def _save_fig(name: str, fig):
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight")
-        plt.close(fig)
-        buf.seek(0)
-        img_bytes = buf.read()
-        plot = Plot(dataset_id=dataset.id, name=name, image=img_bytes)
-        db.add(plot)
-        db.commit()
-        db.refresh(plot)
-        saved_plots.append({"id": plot.id, "name": name})
-
-    # render ROC curve
     try:
         if "roc_curve" in result:
-            fpr = result["roc_curve"]["fpr"]
-            tpr = result["roc_curve"]["tpr"]
-            fig, ax = plt.subplots()
-            ax.plot(fpr, tpr, label=f"ROC (AUC={result.get('roc_auc', 'n/a')})")
-            ax.plot([0, 1], [0, 1], linestyle="--", color="gray")
-            ax.set_xlabel("FPR")
-            ax.set_ylabel("TPR")
-            ax.set_title("ROC Curve")
-            ax.legend(loc="best")
-            _save_fig("roc_curve", fig)
+            rc = result["roc_curve"]
+            plot_data.append({
+                "name": "ROC Curve",
+                "key": "roc_curve",
+                "type": "roc",
+                "data": {"fpr": rc.get("fpr", []), "tpr": rc.get("tpr", []), "auc": result.get("roc_auc")},
+            })
     except Exception:
         pass
 
-    # render PR curve
     try:
         if "pr_curve" in result:
-            precision = result["pr_curve"]["precision"]
-            recall = result["pr_curve"]["recall"]
-            fig, ax = plt.subplots()
-            ax.plot(recall, precision, label=f"PR (AP={result.get('pr_auc', 'n/a')})")
-            ax.set_xlabel("Recall")
-            ax.set_ylabel("Precision")
-            ax.set_title("Precision-Recall Curve")
-            ax.legend(loc="best")
-            _save_fig("pr_curve", fig)
+            pr = result["pr_curve"]
+            plot_data.append({
+                "name": "Precision-Recall Curve",
+                "key": "pr_curve",
+                "type": "pr",
+                "data": {"precision": pr.get("precision", []), "recall": pr.get("recall", []), "ap": result.get("pr_auc")},
+            })
     except Exception:
         pass
 
-    # render confusion matrix
     try:
         if "confusion_matrix" in result:
             cm = result["confusion_matrix"]
-            fig, ax = plt.subplots()
-            im = ax.imshow(cm, cmap="Blues", interpolation="nearest")
-            ax.set_title("Confusion Matrix")
-            fig.colorbar(im, ax=ax)
-            # annotate cells
-            for i in range(len(cm)):
-                for j in range(len(cm[i])):
-                    ax.text(j, i, str(cm[i][j]), ha="center", va="center", color="black")
-            ax.set_xlabel("Predicted")
-            ax.set_ylabel("Actual")
-            _save_fig("confusion_matrix", fig)
+            # Ensure it's a list of lists (JSON serializable)
+            plot_data.append({
+                "name": "Confusion Matrix",
+                "key": "confusion_matrix",
+                "type": "confusion_matrix",
+                "data": {"matrix": cm},
+            })
     except Exception:
         pass
 
-    # render learning curve
     try:
         if "learning_curve" in result:
             lc = result["learning_curve"]
-            fig, ax = plt.subplots()
-            ax.plot(lc["train_sizes"], lc["train_scores_mean"], label="Train")
-            ax.plot(lc["train_sizes"], lc["test_scores_mean"], label="Test")
-            ax.set_xlabel("Training Samples")
-            ax.set_ylabel("Score")
-            ax.set_title("Learning Curve")
-            ax.legend(loc="best")
-            _save_fig("learning_curve", fig)
+            plot_data.append({
+                "name": "Learning Curve",
+                "key": "learning_curve",
+                "type": "learning_curve",
+                "data": {
+                    "train_sizes": lc.get("train_sizes", []),
+                    "train_scores_mean": lc.get("train_scores_mean", []),
+                    "test_scores_mean": lc.get("test_scores_mean", []),
+                },
+            })
     except Exception:
         pass
 
-    # render feature importance
     try:
         if "feature_importance" in result:
             fi = result["feature_importance"]
-            names = [f["name"] for f in fi]
-            vals = [f["importance"] for f in fi]
-            fig, ax = plt.subplots(figsize=(max(6, len(names)*0.4), 4))
-            ax.barh(names, vals)
-            ax.set_xlabel("Importance")
-            ax.set_title("Feature Importance")
-            _save_fig("feature_importance", fig)
+            plot_data.append({
+                "name": "Feature Importance",
+                "key": "feature_importance",
+                "type": "feature_importance",
+                "data": fi,
+            })
     except Exception:
         pass
 
-    # render shap summary (if provided)
     try:
         if "shap_summary" in result:
             ss = result["shap_summary"]
-            names = [s["name"] for s in ss]
-            vals = [s["mean_abs_shap"] for s in ss]
-            fig, ax = plt.subplots(figsize=(max(6, len(names)*0.4), 4))
-            ax.barh(names, vals)
-            ax.set_xlabel("Mean |SHAP value|")
-            ax.set_title("SHAP Summary")
-            _save_fig("shap_summary", fig)
+            plot_data.append({
+                "name": "SHAP Summary",
+                "key": "shap_summary",
+                "type": "shap_summary",
+                "data": ss,
+            })
     except Exception:
         pass
 
+    # Keep `plots` empty for compatibility with older frontends that expect image ids.
+    saved_plots = []
+    try:
+        for pd_item in plot_data:
+            plot = Plot(user_id=current_user.id, dataset_id=dataset.id, name=pd_item.get("key") or pd_item.get("name"), data=pd_item, image=None)
+            db.add(plot)
+            db.commit()
+            db.refresh(plot)
+            saved_plots.append({"id": plot.id, "name": plot.name})
+    except Exception as e:
+        # If saving fails, continue but leave saved_plots as-is
+        print("Warning: failed to save plots to DB:", e)
+
     result["plots"] = saved_plots
+    result["plot_data"] = plot_data
     return result
 
 @router.get("/dashboard/datasets/columns")
