@@ -1,10 +1,12 @@
 import pandas as pd
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
+from backend.ml import ModelManager
 
-class LinRegManager:
+
+class LinRegManager(ModelManager):
     def __init__(self, dataframe: pd.DataFrame, test_split, fit_intercept: bool = True):
         self.df = dataframe
         self.test_split = test_split / 100

@@ -17,8 +17,10 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
+from backend.ml import ModelManager
 
-class DecisionTreeManager:
+
+class DecisionTreeManager(ModelManager):
     def __init__(
         self,
         dataframe: pd.DataFrame,

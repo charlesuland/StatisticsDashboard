@@ -1,23 +1,26 @@
 from typing import Any, Literal
+
 import pandas as pd
 from sklearn.metrics import (
-    r2_score,
-    mean_squared_error,
-    mean_absolute_error,
     accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
     average_precision_score,
-    roc_curve,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
     precision_recall_curve,
+    precision_score,
+    r2_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
 )
-from sklearn.svm import SVR, SVC
 from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC, SVR
+
+from backend.ml import ModelManager
 
 
-class SVMManager:
+class SVMManager(ModelManager):
     def __init__(
         self,
         dataframe: pd.DataFrame,

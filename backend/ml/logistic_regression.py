@@ -1,20 +1,23 @@
 from typing import Any, Literal
+
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
+    f1_score,
+    precision_recall_curve,
     precision_score,
     recall_score,
-    f1_score,
     roc_auc_score,
-    average_precision_score,
     roc_curve,
-    precision_recall_curve,
 )
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
+from backend.ml import ModelManager
 
-class LogRegManager:
+
+class LogRegManager(ModelManager):
     def __init__(
         self,
         dataframe: pd.DataFrame,

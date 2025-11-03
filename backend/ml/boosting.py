@@ -17,8 +17,10 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
+from backend.ml import ModelManager
 
-class BoostingManager:
+
+class BoostingManager(ModelManager):
     def __init__(
         self,
         dataframe: pd.DataFrame,
