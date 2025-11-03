@@ -10,6 +10,7 @@ General I/O contract:
 - Regressors return: `{"r2_score": float, "mse": float, "mae": float}`
 - Classifiers return: `{"accuracy": float, "precision": float, "recall": float, "f1": float}`
   - If needed, they also return (in the same dictionary): `{"roc_auc": float, "pr_auc": float, "roc_curve": {"fpr": [...], "tpr": [...]}, "pr_curve": {"precision": [...], "recall": [...]}}`
+  - 
 - All managers expose `train(target, features)` which: splits data using `test_split`, fits the estimator, predicts on the test set, and returns metrics.
 
 **TODO**
@@ -92,3 +93,62 @@ cross-validation
 - `classifier`: bool (default: False) - uses MLPClassifier if True.
 
 ---
+
+# Return values for manager.train(target, features)
+
+All managers return a JSON-serializable dict with model metrics and optional artifacts.
+
+- Common keys (present where applicable)
+  - For regressors:
+    - r2: float
+    - mse: float
+    - mae: float
+  - For classifiers:
+    - accuracy: float
+    - precision: float
+    - recall: float
+    - f1: float
+    - roc_auc: float (when probabilities available)
+    - pr_auc: float (when probabilities available)
+  - Cross-validation summaries (optional)
+    - cv_mean: dict — e.g. {"accuracy_mean": 0.91, "precision_mean": 0.89} or {"r2_mean": 0.72, "mse_mean": 1.23}
+    - cv_std: dict — same keys as cv_mean with std values
+  - Evaluation artifacts (optional)
+    - roc_curve: {"fpr": [...], "tpr": [...]} — arrays of floats
+    - pr_curve: {"precision": [...], "recall": [...]} — arrays of floats
+    - confusion_matrix: [[int,...], [...,...]] — 2D list of integers
+    - feature_importance: [{"name": str, "importance": float}, ...]
+    - learning_curve: {"train_sizes": [...], "train_scores_mean": [...], "test_scores_mean": [...]}
+    - shap_summary: [{"name": str, "mean_abs_shap": float}, ...]
+
+Notes
+- Keys not applicable or unavailable (e.g., roc_auc when no probabilities) are omitted.
+- Numeric values are plain Python floats (JSON numbers); arrays are lists.
+- cv_mean/cv_std keys follow the metric names used by sklearn cross_validate with `_mean`/`_std` suffixes.
+
+Examples (minimal)
+- Classifier (binary):
+  {
+    "accuracy": 0.92,
+    "precision": 0.91,
+    "recall": 0.90,
+    "f1": 0.905,
+    "roc_auc": 0.96,
+    "roc_curve": {"fpr": [0.0, 0.1, ...], "tpr": [0.0, 0.85, ...]},
+    "confusion_matrix": [[50, 5], [4, 41]],
+    "feature_importance": [{"name":"x1","importance":0.34}, {"name":"x2","importance":0.12}],
+    "learning_curve": {"train_sizes":[20,40,80],"train_scores_mean":[0.9,0.92,0.95],"test_scores_mean":[0.85,0.88,0.9]},
+    "cv_mean": {"accuracy_mean":0.91, "f1_mean":0.90},
+    "cv_std": {"accuracy_std":0.02, "f1_std":0.015}
+  }
+
+- Regressor:
+  {
+    "r2": 0.78,
+    "mse": 1.23,
+    "mae": 0.87,
+    "feature_importance": [{"name":"x1","importance":0.45}, ...],
+    "learning_curve": {...},
+    "cv_mean": {"r2_mean":0.75, "mse_mean":1.34},
+    "cv_std": {"r2_std":0.03, "mse_std":0.12}
+  }

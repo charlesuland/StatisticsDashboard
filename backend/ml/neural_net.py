@@ -1,25 +1,12 @@
 from typing import Any, Literal
-
+import numpy as np
 import pandas as pd
-from numpy.typing import ArrayLike
-from sklearn.metrics import (
-    accuracy_score,
-    average_precision_score,
-    f1_score,
-    mean_absolute_error,
-    mean_squared_error,
-    precision_recall_curve,
-    precision_score,
-    r2_score,
-    recall_score,
-    roc_auc_score,
-    roc_curve,
-)
-from sklearn.model_selection import train_test_split
-from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score, roc_curve, precision_recall_curve
+from sklearn.neural_network import MLPRegressor, MLPClassifier
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold, cross_validate
 
 from . import ModelManager
-
+from numpy.typing import ArrayLike
 
 class NeuralNetManager(ModelManager):
     def __init__(
@@ -33,6 +20,7 @@ class NeuralNetManager(ModelManager):
         max_iter: int = 500,
         random_state: int = 42,
         classifier: bool = False,
+        cv_folds: int = 5,
     ):
         self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
@@ -43,11 +31,35 @@ class NeuralNetManager(ModelManager):
         self.lr = lr
         self.random_state = random_state
         self.classifier = classifier
+        self.cv_folds = cv_folds
 
     def train(self, target, features):
         X = self.df[features].copy()
         y = self.df[target].copy()
 
+        # cross-validate
+        if self.classifier:
+            scoring = {"accuracy": "accuracy", "precision": "precision_macro", "recall": "recall_macro", "f1": "f1_macro", "roc_auc": "roc_auc", "pr_auc": "average_precision"}
+            cv = StratifiedKFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
+            try:
+                cv_res = cross_validate(MLPClassifier(hidden_layer_sizes=self.hidden_layer_sizes, activation=self.activation, solver=self.solver, max_iter=self.max_iter, learning_rate_init=self.lr, random_state=self.random_state), X, y, cv=cv, scoring=scoring)
+                cv_mean = {k + "_mean": float(np.mean(cv_res[f"test_{k}"])) for k in scoring}
+                cv_std = {k + "_std": float(np.std(cv_res[f"test_{k}"])) for k in scoring}
+            except Exception:
+                cv_mean = {}
+                cv_std = {}
+        else:
+            scoring = {"r2": "r2", "neg_mse": "neg_mean_squared_error", "neg_mae": "neg_mean_absolute_error"}
+            cv = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
+            try:
+                cv_res = cross_validate(MLPRegressor(hidden_layer_sizes=self.hidden_layer_sizes, activation=self.activation, solver=self.solver, max_iter=self.max_iter, learning_rate_init=self.lr, random_state=self.random_state), X, y, cv=cv, scoring=scoring)
+                cv_mean = {"r2_mean": float(np.mean(cv_res["test_r2"])), "mse_mean": float(-np.mean(cv_res["test_neg_mse"])), "mae_mean": float(-np.mean(cv_res["test_neg_mae"]))}
+                cv_std = {"r2_std": float(np.std(cv_res["test_r2"])), "mse_std": float(np.std(cv_res["test_neg_mse"])), "mae_std": float(np.std(cv_res["test_neg_mae"]))}
+            except Exception:
+                cv_mean = {}
+                cv_std = {}
+
+        # Hold-out split for final training/evaluation
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -89,6 +101,8 @@ class NeuralNetManager(ModelManager):
                     "precision": precision.tolist(),
                     "recall": recall.tolist(),
                 }
+            result["cv_mean"] = cv_mean
+            result["cv_std"] = cv_std
             try:
                 eval_artifacts = self.evaluate_model(
                     model,
@@ -120,6 +134,8 @@ class NeuralNetManager(ModelManager):
                 "mse": float(mean_squared_error(y_test, y_pred)),
                 "mae": float(mean_absolute_error(y_test, y_pred)),
             }
+            result["cv_mean"] = cv_mean
+            result["cv_std"] = cv_std
             try:
                 eval_artifacts = self.evaluate_model(
                     model,
