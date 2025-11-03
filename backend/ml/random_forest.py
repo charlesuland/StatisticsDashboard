@@ -2,7 +2,19 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, average_precision_score, roc_curve, precision_recall_curve
+from sklearn.metrics import (
+    r2_score,
+    mean_squared_error,
+    mean_absolute_error,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    average_precision_score,
+    roc_curve,
+    precision_recall_curve,
+)
 from sklearn.model_selection import train_test_split, KFold, StratifiedKFold, cross_validate
 
 from . import ModelManager
@@ -19,8 +31,7 @@ class RandForestManager(ModelManager):
         classifier: bool = False,
         cv_folds: int = 5,
     ):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.random_state = random_state
@@ -28,15 +39,27 @@ class RandForestManager(ModelManager):
         self.cv_folds = cv_folds
 
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        X, y = self.prepare_xy(features, target, classifier=self.classifier)
 
         # Cross-validation summary
         if self.classifier:
-            scoring = {"accuracy": "accuracy", "precision": "precision_macro", "recall": "recall_macro", "f1": "f1_macro", "roc_auc": "roc_auc", "pr_auc": "average_precision"}
+            scoring = {
+                "accuracy": "accuracy",
+                "precision": "precision_macro",
+                "recall": "recall_macro",
+                "f1": "f1_macro",
+                "roc_auc": "roc_auc",
+                "pr_auc": "average_precision",
+            }
             cv = StratifiedKFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
             try:
-                cv_res = cross_validate(RandomForestClassifier(n_estimators=self.n_estimators, max_depth=self.max_depth, random_state=self.random_state), X, y, cv=cv, scoring=scoring)
+                cv_res = cross_validate(
+                    RandomForestClassifier(n_estimators=self.n_estimators, max_depth=self.max_depth, random_state=self.random_state),
+                    X,
+                    y,
+                    cv=cv,
+                    scoring=scoring,
+                )
                 cv_mean = {k + "_mean": float(np.mean(cv_res[f"test_{k}"])) for k in scoring}
                 cv_std = {k + "_std": float(np.std(cv_res[f"test_{k}"])) for k in scoring}
             except Exception:
@@ -46,9 +69,23 @@ class RandForestManager(ModelManager):
             scoring = {"r2": "r2", "neg_mse": "neg_mean_squared_error", "neg_mae": "neg_mean_absolute_error"}
             cv = KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state)
             try:
-                cv_res = cross_validate(RandomForestRegressor(n_estimators=self.n_estimators, max_depth=self.max_depth, random_state=self.random_state), X, y, cv=cv, scoring=scoring)
-                cv_mean = {"r2_mean": float(np.mean(cv_res["test_r2"])), "mse_mean": float(-np.mean(cv_res["test_neg_mse"])), "mae_mean": float(-np.mean(cv_res["test_neg_mae"]))}
-                cv_std = {"r2_std": float(np.std(cv_res["test_r2"])), "mse_std": float(np.std(cv_res["test_neg_mse"])), "mae_std": float(np.std(cv_res["test_neg_mae"]))}
+                cv_res = cross_validate(
+                    RandomForestRegressor(n_estimators=self.n_estimators, max_depth=self.max_depth, random_state=self.random_state),
+                    X,
+                    y,
+                    cv=cv,
+                    scoring=scoring,
+                )
+                cv_mean = {
+                    "r2_mean": float(np.mean(cv_res["test_r2"])),
+                    "mse_mean": float(-np.mean(cv_res["test_neg_mse"])),
+                    "mae_mean": float(-np.mean(cv_res["test_neg_mae"])),
+                }
+                cv_std = {
+                    "r2_std": float(np.std(cv_res["test_r2"])),
+                    "mse_std": float(np.std(cv_res["test_neg_mse"])),
+                    "mae_std": float(np.std(cv_res["test_neg_mae"])),
+                }
             except Exception:
                 cv_mean = {}
                 cv_std = {}

@@ -10,15 +10,13 @@ from . import ModelManager
 
 class LinRegManager(ModelManager):
     def __init__(self, dataframe: pd.DataFrame, test_split, fit_intercept: bool = True, cv_folds: int = 5):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.fit_intercept = fit_intercept
         self.cv_folds = cv_folds
 
     # renamed to `train` to match abstract interface and use self.test_split
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        X, y = self.prepare_xy(features, target, classifier=False)
 
         # Cross-validation summary (regression)
         scoring = {"r2": "r2", "neg_mse": "neg_mean_squared_error", "neg_mae": "neg_mean_absolute_error"}

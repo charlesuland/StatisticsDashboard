@@ -15,7 +15,9 @@ except Exception:
 
 class ModelManager(metaclass=ABCMeta):
     def __init__(self, dataframe: pd.DataFrame, test_split: int):
-        self.df = self.sanitize(dataframe)
+        # store a raw copy of the dataframe; per-model training will sanitize features
+        # and handle the target column explicitly via prepare_xy
+        self.df = dataframe.copy()
         self.test_split = test_split / 100
 
     @abstractmethod
@@ -65,18 +67,12 @@ class ModelManager(metaclass=ABCMeta):
 
         # Ensure datetime columns are native numpy datetime64[ns]
         for col in df.columns:
-            if ptypes.is_datetime64_any_dtype(df[col]) or ptypes.is_datetime64tz_dtype(
-                df[col]
-            ):
+            # normalize any datetime-like columns to pandas datetime
+            if ptypes.is_datetime64_any_dtype(df[col]):
                 df[col] = pd.to_datetime(df[col], errors="coerce", utc=False)
 
         # Convert datetime columns to numeric epoch seconds to avoid dtype mixing
-        datetime_cols = [
-            c
-            for c in df.columns
-            if ptypes.is_datetime64_any_dtype(df[c])
-            or ptypes.is_datetime64tz_dtype(df[c])
-        ]
+        datetime_cols = [c for c in df.columns if ptypes.is_datetime64_any_dtype(df[c])]
         for c in datetime_cols:
             # astype('int64') gives ns since epoch; convert to seconds as float64
             try:
@@ -106,6 +102,71 @@ class ModelManager(metaclass=ABCMeta):
         # Reset index and return
         df = df.reset_index(drop=True)
         return df
+
+    def prepare_xy(self, features: list[str], target: str, classifier: bool | None = None):
+        """
+        Prepare X (features) and y (target) for training.
+
+        - Sanitizes only the feature columns using `sanitize` so we don't accidentally
+          convert or re-encode the target column in a way that breaks stratify or
+          label semantics.
+        - Handles target encoding: for classification (classifier=True) or when the
+          target is non-numeric, convert to categorical integer codes. For
+          regression (classifier=False) coerce target to float and fill NaNs with
+          the column mean.
+
+        Returns (X, y) where X is a 2D numpy-compatible array / DataFrame and y is a
+        1-D pandas Series (numeric dtypes).
+        """
+        if target not in self.df.columns:
+            raise ValueError(f"Target column '{target}' not found in dataframe")
+
+        # Work on copies
+        X_df = self.df[features].copy()
+        y_s = self.df[target].copy()
+
+        # Sanitize only the feature frame (this will coerce datetimes/numerics/categoricals)
+        X_df = self.sanitize(X_df)
+
+        # Decide how to treat target
+        # If classifier flag not provided, infer from dtype: object or categorical -> classifier
+        if classifier is None:
+            inferred_classifier = not (ptypes.is_float_dtype(y_s) or ptypes.is_integer_dtype(y_s))
+        else:
+            inferred_classifier = bool(classifier)
+
+        # Handle classification targets: map to integer codes if necessary
+        if inferred_classifier:
+            # If it's numeric already but continuous, we still coerce to categorical
+            if not ptypes.is_integer_dtype(y_s):
+                # try numeric coercion first: if many values parse, keep numeric
+                coerced = pd.to_numeric(y_s, errors="coerce")
+                if coerced.notna().sum() >= max(1, int(0.5 * len(y_s))):
+                    # treat as numeric labels but cast to integer if it's integral
+                    if np.all(np.mod(coerced.dropna(), 1) == 0):
+                        y_s = coerced.fillna(coerced.mean()).astype("int64")
+                    else:
+                        # numeric but non-integer: keep as float
+                        y_s = coerced.fillna(coerced.mean()).astype("float64")
+                else:
+                    # convert to categorical codes
+                    cats = pd.Categorical(y_s)
+                    y_s = pd.Series(cats.codes, index=y_s.index, dtype="int64")
+        else:
+            # Regression target: coerce to numeric float and fill NaNs with mean
+            y_num = pd.to_numeric(y_s, errors="coerce")
+            if y_num.isna().any():
+                try:
+                    mean_val = float(y_num.mean(skipna=True))
+                except Exception:
+                    mean_val = 0.0
+                y_num = y_num.fillna(mean_val)
+            y_s = y_num.astype("float64")
+
+        # Ensure X and y indices align and return
+        X_df = X_df.reset_index(drop=True)
+        y_s = y_s.reset_index(drop=True)
+        return X_df, y_s
 
     def evaluate_model(
         self,
@@ -203,7 +264,7 @@ class ModelManager(metaclass=ABCMeta):
 
         # Learning curve (quick hold-out sized learning curve)
         try:
-            train_sizes, train_scores, test_scores = learning_curve(
+            lc_res = learning_curve(
                 model,
                 np.vstack([X_train, X_test]),
                 np.concatenate([y_train, y_test]),
@@ -215,6 +276,8 @@ class ModelManager(metaclass=ABCMeta):
                 random_state=42,
                 return_times=False,
             )
+            # learning_curve may return 3 or 5 values depending on sklearn version; handle either
+            train_sizes, train_scores, test_scores = lc_res[0], lc_res[1], lc_res[2]
             out["learning_curve"] = {
                 "train_sizes": train_sizes.tolist(),
                 "train_scores_mean": np.mean(train_scores, axis=1).tolist(),

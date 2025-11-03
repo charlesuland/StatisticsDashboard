@@ -30,8 +30,7 @@ class LogRegManager(ModelManager):
         max_iter: int = 1000,
         cv_folds: int = 5,
     ):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.penalty = penalty
         self.C = C
         self.solver = solver
@@ -39,8 +38,8 @@ class LogRegManager(ModelManager):
         self.cv_folds = cv_folds
 
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        # prepare features and target; logistic regression is a classifier
+        X, y = self.prepare_xy(features, target, classifier=True)
 
         # Cross-validation summary (classification)
         scoring = {

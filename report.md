@@ -70,38 +70,47 @@ Key data flows:
 - Lightweight dev setup
 	- Minimal dependencies and no heavyweight orchestration: SQLite + single Python process + Vite dev server. Good for teaching and reproducibility.
 
-## Discussion — methods comparison, trade-offs, and limitations
+## Discussion — methods comparison, trade-offs, and limitations (expanded)
 
-This app implements several model classes (logistic regression, linear regression, decision trees, bagging, boosting, random forest, SVM, and a basic neural net manager). Below I compare approaches and connect them to the repository's design choices.
+This section provides an evidence-focused comparison of model families implemented in the repository, practical guidance for reproducible experiments, and prioritized, actionable changes.
 
-1) Tree ensembles (Random Forest, Bagging, Boosting)
-	 - Strengths: handle mixed datatypes, robust to outliers, provide feature importances via `feature_importances`, often strong off-the-shelf performance, less need for scaling or heavy preprocessing.
-	 - In this repo: `RandForestManager` and `BaggingManager` benefit from the `ModelManager.sanitize` (especially handling categorical codes and datetime conversion), and SHAP's `TreeExplainer` can be used to produce SHAP summaries quickly.
-	 - Trade-offs: ensembles are heavier computationally and can be memory intensive for large datasets. The current learning-curve computation (learning_curve with cv=3) can be expensive; the code runs with n_jobs=1 to limit parallelism.
+Summary of model families and when to prefer them
+- Tree ensembles (Random Forest, Gradient/Boosting, Bagging)
+  - Strengths: handle mixed datatypes and missing-value imputation well after simple preprocessing; provide fast, reliable feature-importance estimates; often high out-of-the-box accuracy on tabular data.
+  - Weaknesses: larger memory and CPU usage for large forests; interpretation beyond global importances can require SHAP or surrogate models.
+  - When to use here: default first-line models for heterogeneous features and baseline comparisons.
 
-2) Support Vector Machines (SVM)
-	 - Strengths: effective in high-dimensional spaces, robust regularization, can work well for small-to-medium datasets.
-	 - Trade-offs: SVMs require feature scaling and are slower for large datasets (kernel methods scale poorly). Implementation in `support_vector_machine.py` must ensure numeric features are scaled beforehand — currently `ModelManager` does not scale features, so dividing responsibilities (preprocessing vs model pipeline) should be considered.
+- Linear models (Logistic / Linear Regression)
+  - Strengths: fast, interpretable coefficients, low variance; useful as a baseline and for feature selection.
+  - Weaknesses: underfit when relationships are non-linear or when interactions are important.
+  - When to use: quick baselines and datasets where interpretability matters.
 
-3) Neural Networks (DNN)
-	 - Strengths: highly expressive; can learn complex interactions and representation learning from raw features.
-	 - Trade-offs: require careful hyperparameter tuning, more training time, and are sensitive to input scaling and missing-value strategies. The repo's `neural_net` manager wraps a simple DNN; for production or larger experiments, one would integrate PyTorch or TensorFlow-based training loops with GPU support — the current CPU-only, scikit-learn-like approach is fine for demos.
+- Support Vector Machines (SVM)
+  - Strengths: effective in medium-dimensional problems; kernel methods capture non-linear decision boundaries.
+  - Weaknesses: require feature scaling; training time and memory scale poorly with sample size (especially with non-linear kernels).
+  - When to use: smaller datasets or when margin-based classifiers are preferred, with a StandardScaler in the preprocessing pipeline.
 
-4) Linear/Logistic regression
-	 - Strengths: interpretable coefficients, fast training, small memory footprint.
-	 - Trade-offs: less expressive; may underperform when relationships are non-linear. Still valuable as baselines.
+- Neural networks (basic DNN manager)
+  - Strengths: flexible function approximators, can model complex interactions.
+  - Weaknesses: sensitive to input scaling, hyperparameters, and require more careful training; risk of overfitting on small datasets.
+  - When to use: larger labeled datasets and when you can afford tuning; in the future, replace scikit-learn wrapper with frameworks (PyTorch/TF).
 
-Evidence-based comparison (how to reproduce locally)
-- Run repeated experiments on a small uploaded dataset and compare metrics returned by `/dashboard/modelevaluation` (e.g., `roc_auc`, `pr_auc`, `accuracy`). The managers already return cross-validation summaries (`cv_mean` and `cv_std`) for classifiers — use these fields to compare stability across models.
+Practical suggestions for improving reproducibility and pedagogy
+- Add a reproducible experiment notebook that:
+  1. Uploads a small sample dataset to the backend.
+  2. Runs the three canonical models with fixed seeds.
+  3. Collects plots and metrics and shows step-by-step how to interpret them (ROC vs PR, calibration).
+- Add small unit tests under `tests/` that construct tiny DataFrames and call each manager's train/predict methods to catch regressions. Example tests already suggested under `tests/test_ml_models.py`.
 
-Limitations & current gaps
-- No scaling pipeline: `ModelManager.sanitize` normalizes types and imputes means, but it does not apply feature scaling (StandardScaler/MinMax) which is important for SVMs and neural nets.
-- No migrations: schema changes will recreate models with `create_all` and may not be safe for production data—Alembic is recommended for future work.
-- Single-process evaluation: CPU-bound training and evaluation (especially SHAP) can be slow; there is no job queue or async task processing. For larger runs, integrate a background worker (Celery/RQ) or async tasks.
-- Security: `SECRET_KEY` is hard-coded in `backend/auth.py` and should be moved to environment variables. Uploaded file handling should validate filenames and sanitize paths; current code uses `os.path.join` with username but doesn't fully validate filename content.
-
-Future work
-- Add a minimal pipeline abstraction that composes `ModelManager.sanitize` + optional scalers + model pipeline (e.g., scikit-learn Pipelines). This will standardize preprocessing for SVMs and DNNs.
-- Integrate Alembic for DB migrations and move DB credentials to configuration/env variables.
-- Add a background task queue for long-running evaluations and SHAP computations, and provide job status endpoints.
-- Add automated unit tests for each ML manager (small DataFrame smoke tests) and expand CI to run them.
+Prioritized future work (short roadmap)
+1. Immediate (low friction)
+   - Add StandardScaler option and integrate into SVM and neural-net managers.
+   - Make SHAP sampling-based and configurable.
+   - Move secrets to environment variables and sanitize filenames.
+2. Medium term
+   - Add Alembic for DB migrations and move DB config to env-based settings.
+   - Introduce a simple job queue for long-running evaluations and SHAP computations.
+   - Expose job status endpoints and enable asynchronous triggers from the frontend.
+3. Longer term
+   - Replace the experimental DNN manager with a lightweight PyTorch/TF backend for larger experiments.
+   - Add CI to run unit tests for each manager on sample DataFrames and run linting.
