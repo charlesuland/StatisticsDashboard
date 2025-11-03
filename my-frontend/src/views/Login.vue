@@ -13,6 +13,8 @@
       <button type="submit">Login</button>
     </form>
     <p v-if="error" style="color: red">{{ error }}</p>
+
+    <router-link to="/register">Register</router-link>
   </div>
 </template>
 

@@ -1,9 +1,10 @@
 import csv
-from fastapi import APIRouter, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
 import pandas as pd
+from auth_routes import get_current_user
 import ml
 
 router = APIRouter()
@@ -33,13 +34,18 @@ def userDasboard():
     #give the information needed for the user dashboard
     return
 
+# List datasets for current user
 @router.get("/dashboard/datasets")
-def userDatasets():
-    print("routed up")
-    files = []
-    for filename in os.listdir("uploads"):
-        files.append(filename)
+def user_datasets(current_user: str = Depends(get_current_user)):
+    user_folder = os.path.join("upload", current_user)
+    if not os.path.exists(user_folder):
+        return {"files": []}  # user has no files yet
+
+    files = [f for f in os.listdir(user_folder) if os.path.isfile(os.path.join(user_folder, f))]
+    for file in os.listdir("uploads/public"):
+        files.append(file)
     return {"files": files}
+
 async def detect_delimiter(file: UploadFile):
     content = await file.read()
     await file.seek(0)

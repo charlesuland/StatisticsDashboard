@@ -40,6 +40,16 @@
       v-model="testSplit"
     />
   </div>
+      <!-- ML Model Dropdown -->
+    <div class="form-group">
+      <label for="model">Select ML Model:</label>
+      <select id="model" v-model="selectedModel">
+        <option value="" disabled>Select a model</option>
+        <option v-for="model in models" :key="model.value" :value="model.value">
+          {{ model.label }}
+        </option>
+      </select>
+    </div>
         <!-- Submit Button -->
       <button
         :disabled="!canSubmit"
@@ -60,9 +70,10 @@ const columns = ref([])
 const selectedColumns = ref([])
 const testSplit = ref(20)
 const selectedDataset = ref("")
+const selectedModel = ref("")
 
 const canSubmit = computed(() => {
-  return selectedDataset.value && selectedColumns.value.length > 0 && targetColumn.value;
+  return selectedModel.value && selectedDataset.value && selectedColumns.value.length > 0 && targetColumn.value;
 });
 
 
@@ -110,6 +121,7 @@ async function submitOptions() {
       features: selectedColumns.value,
       target: targetColumn.value,
       test_split: testSplit.value,
+      model: selectedModel.value
     };
 
     const response = await axios.post(
@@ -123,4 +135,14 @@ async function submitOptions() {
     console.error("Failed to submit options:", error);
   }
 }
+    const models = [
+      { label: "Linear Regression", value: "linear_regression" },
+      { label: "Logistic Regression", value: "logistic_regression" },
+      { label: "Decision Tree", value: "decision_tree" },
+      { label: "Random Forest", value: "random_forest" },
+      { label: "Support Vector Machine", value: "svm" },
+      { label: "Bagging", value: "bagging" },
+      { label: "Boosting", value: "boosting" },
+      { label: "Custom Neural Network", value: "custom_dnn" },
+    ];
 </script>

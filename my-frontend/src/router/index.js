@@ -4,6 +4,7 @@ import Index from '@/views/Index.vue';
 import Dataset from '@/views/Dataset.vue';
 import ModelEvaluation from '@/views/ModelEvaluation.vue';
 import Login from '@/views/Login.vue';
+import Register from '@/views/Register.vue';
 
 const routes = [
     {path: "/", component: Index },
@@ -23,6 +24,7 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
     const publicPaths = ["/login", "/register", "/"];
+    const token = localStorage.getItem("token"); // must come before if-statement!
     if (!publicPaths.includes(to.path) && !token) {
     next("/login");
     } else {
