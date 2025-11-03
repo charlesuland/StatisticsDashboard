@@ -6,13 +6,11 @@ import Navbar from './components/Navbar.vue';
 
 const route = useRoute();
 
-const showNavbar = true;//computed(() => route.path !== '/');
+const showNavbar = false;//computed(() => route.path !== '/' && route.path !== '/login');
 </script>
 
 <template>
   <Navbar v-if="showNavbar"/>
-  
-  <router-link to="/dashboard">Dashboard</router-link>
 
   <main>
     <router-view />

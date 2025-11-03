@@ -127,7 +127,7 @@ class ModelManager(metaclass=ABCMeta):
 
         # Sanitize only the feature frame (this will coerce datetimes/numerics/categoricals)
         X_df = self.sanitize(X_df)
-
+        y_s = y_s.loc[X_df.index]
         # Decide how to treat target
         # If classifier flag not provided, infer from dtype: object or categorical -> classifier
         if classifier is None:
@@ -169,49 +169,58 @@ class ModelManager(metaclass=ABCMeta):
         return X_df, y_s
 
     def evaluate_model(
-        self,
-        model,
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        is_classifier: bool = True,
-        feature_names: list | None = None,
-    ) -> dict[str, Any]:
+    self,
+    model,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    is_classifier: bool = True,
+    feature_names: list | None = None,
+) -> dict[str, Any]:
+        """
+        Evaluate a trained model and return metrics, learning curves, and optional SHAP values.
+
+        Handles:
+        - Confusion matrix (classification)
+        - ROC / PR curves and AUC (binary & multi-class)
+        - Feature importances / coefficients
+        - Learning curve
+        - SHAP summary (optional)
+        """
         out: dict[str, Any] = {}
 
-        # Confusion matrix for classifiers
+        # --------------------------
+        # Confusion Matrix (Classifiers)
+        # --------------------------
         if is_classifier:
             try:
                 y_pred = model.predict(X_test)
-                cm = confusion_matrix(y_test, y_pred).tolist()
-                out["confusion_matrix"] = cm
-            except Exception:
-                pass
+                out["confusion_matrix"] = confusion_matrix(y_test, y_pred).tolist()
+            except Exception as e:
+                print("Confusion matrix failed:", e)
 
-            # ROC / PR if probabilities or decision_function
+        # --------------------------
+        # ROC / PR / AUC
+        # --------------------------
+        if is_classifier:
             y_proba = None
             try:
                 if hasattr(model, "predict_proba"):
                     y_proba = model.predict_proba(X_test)
-                    # if multiclass, leave full array; we compute only binary if possible
                 elif hasattr(model, "decision_function"):
-                    # try to convert decision_function output to probabilities via minmax
                     df = model.decision_function(X_test)
-                    # if binary, df is shape (n,) else (n, n_classes)
                     if df.ndim == 1:
-                        # scale to 0-1
+                        # Binary decision function → scale to 0-1
                         from sklearn.preprocessing import MinMaxScaler
 
                         scaler = MinMaxScaler()
                         y_proba = scaler.fit_transform(df.reshape(-1, 1))
-                # compute ROC/PR for binary case
-                if y_proba is not None:
-                    # pick column 1 when binary
-                    if y_proba.ndim == 2 and y_proba.shape[1] >= 2:
-                        scores = y_proba[:, 1]
                     else:
-                        scores = y_proba.ravel()
+                        y_proba = df  # multi-class decision function
+
+                if y_proba is not None:
+                    from sklearn.preprocessing import label_binarize
                     from sklearn.metrics import (
                         average_precision_score,
                         precision_recall_curve,
@@ -219,38 +228,56 @@ class ModelManager(metaclass=ABCMeta):
                         roc_curve,
                     )
 
-                    fpr, tpr, _ = roc_curve(y_test, scores)
-                    prec, rec, _ = precision_recall_curve(y_test, scores)
-                    out["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
-                    out["pr_curve"] = {
-                        "precision": prec.tolist(),
-                        "recall": rec.tolist(),
-                    }
-                    try:
+                    classes = np.unique(y_test)
+
+                    if len(classes) == 2:
+                        # Binary classification
+                        scores = y_proba[:, 1] if y_proba.ndim == 2 else y_proba.ravel()
+                        fpr, tpr, _ = roc_curve(y_test, scores)
+                        prec, rec, _ = precision_recall_curve(y_test, scores)
+                        out["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
+                        out["pr_curve"] = {"precision": prec.tolist(), "recall": rec.tolist()}
                         out["roc_auc"] = float(roc_auc_score(y_test, scores))
                         out["pr_auc"] = float(average_precision_score(y_test, scores))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    else:
+                        # Multi-class classification
+                        y_true_bin = label_binarize(y_test, classes=classes)
+                        # ROC AUC (One-vs-Rest)
+                        try:
+                            out["roc_auc"] = float(
+                                roc_auc_score(y_true_bin, y_proba, average="macro", multi_class="ovr")
+                            )
+                        except Exception as e:
+                            print("Multi-class ROC AUC failed:", e)
+                            out["roc_auc"] = None
+                        # Average Precision (macro)
+                        try:
+                            out["pr_auc"] = float(
+                                average_precision_score(y_true_bin, y_proba, average="macro")
+                            )
+                        except Exception as e:
+                            print("Multi-class PR AUC failed:", e)
+                            out["pr_auc"] = None
 
-        # Feature importances / coefficients
+            except Exception as e:
+                print("ROC/PR computation failed:", e)
+
+        # --------------------------
+        # Feature Importance / Coefficients
+        # --------------------------
         try:
             if hasattr(model, "feature_importances_"):
-                importances = getattr(model, "feature_importances_")
+                importances = model.feature_importances_
                 names = feature_names or [f"f{i}" for i in range(len(importances))]
                 out["feature_importance"] = [
-                    {"name": n, "importance": float(v)}
-                    for n, v in zip(names, importances)
+                    {"name": n, "importance": float(v)} for n, v in zip(names, importances)
                 ]
             elif hasattr(model, "coef_"):
-                coef = getattr(model, "coef_")
-                # handle multiclass & reshape to 1D by absolute sum
+                coef = model.coef_
                 if coef.ndim == 1:
                     names = feature_names or [f"f{i}" for i in range(len(coef))]
                     out["feature_importance"] = [
-                        {"name": n, "importance": float(abs(v))}
-                        for n, v in zip(names, coef)
+                        {"name": n, "importance": float(abs(v))} for n, v in zip(names, coef)
                     ]
                 else:
                     # multiclass: sum abs across classes
@@ -259,10 +286,12 @@ class ModelManager(metaclass=ABCMeta):
                     out["feature_importance"] = [
                         {"name": n, "importance": float(v)} for n, v in zip(names, agg)
                     ]
-        except Exception:
-            pass
+        except Exception as e:
+            print("Feature importance extraction failed:", e)
 
-        # Learning curve (quick hold-out sized learning curve)
+        # --------------------------
+        # Learning Curve
+        # --------------------------
         try:
             lc_res = learning_curve(
                 model,
@@ -276,37 +305,32 @@ class ModelManager(metaclass=ABCMeta):
                 random_state=42,
                 return_times=False,
             )
-            # learning_curve may return 3 or 5 values depending on sklearn version; handle either
-            train_sizes, train_scores, test_scores = lc_res[0], lc_res[1], lc_res[2]
+            train_sizes, train_scores, test_scores = lc_res
             out["learning_curve"] = {
                 "train_sizes": train_sizes.tolist(),
                 "train_scores_mean": np.mean(train_scores, axis=1).tolist(),
                 "test_scores_mean": np.mean(test_scores, axis=1).tolist(),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            print("Learning curve computation failed:", e)
 
-        # SHAP values (optional and expensive)
+        # --------------------------
+        # SHAP summary (optional)
+        # --------------------------
         if shap is not None:
             try:
                 explainer = None
-                # TreeExplainer for tree-based models
-                if hasattr(shap, "TreeExplainer") and hasattr(
-                    model, "feature_importances_"
-                ):
+                if hasattr(shap, "TreeExplainer") and hasattr(model, "feature_importances_"):
                     explainer = shap.TreeExplainer(model)
                 else:
                     explainer = shap.Explainer(model, X_train)
                 sv = explainer(X_test)
-                # convert a reduced summary: mean abs shap per feature
                 mean_abs = np.mean(np.abs(sv.values), axis=0)
                 names = feature_names or [f"f{i}" for i in range(len(mean_abs))]
                 out["shap_summary"] = [
-                    {"name": n, "mean_abs_shap": float(v)}
-                    for n, v in zip(names, mean_abs)
+                    {"name": n, "mean_abs_shap": float(v)} for n, v in zip(names, mean_abs)
                 ]
-            except Exception:
-                # ignore shap failures
-                pass
+            except Exception as e:
+                print("SHAP computation failed:", e)
 
         return out

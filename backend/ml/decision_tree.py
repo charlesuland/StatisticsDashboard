@@ -51,7 +51,7 @@ class DecisionTreeManager(ModelManager):
                 "roc_auc": "roc_auc",
                 "pr_auc": "average_precision",
             }
-            cv = StratifiedKFold(
+            cv = KFold(
                 n_splits=self.cv_folds, shuffle=True, random_state=self.random_state
             )
             try:

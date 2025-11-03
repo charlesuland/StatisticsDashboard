@@ -1,34 +1,24 @@
 import csv
 import datetime
 import json
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import io
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
+from sqlalchemy.orm import Session
 import pandas as pd
 from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
-from models import Dataset, DefaultModel, Plot, User, LinearRegressionModel, LogisticRegressionModel, DecisionTreeModel, RandomForestModel, SVMModel, BaggingModel, BoostingModel, UserDefinedDNNModel
-from sqlalchemy.orm import Session
+from models import Dataset, DefaultModel, Plot, User
 
 router = APIRouter()
 
 # Mapping from frontend model names to SQLAlchemy tables
-MODEL_TABLES = {
-    "linear_regression": LinearRegressionModel,
-    "logistic_regression": LogisticRegressionModel,
-    "decision_tree": DecisionTreeModel,
-    "random_forest": RandomForestModel,
-    "svm": SVMModel,
-    "bagging": BaggingModel,
-    "boosting": BoostingModel,
-    "custom_dnn": UserDefinedDNNModel,
-}
+
 
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 
@@ -111,7 +101,7 @@ async def add_user_dataset(
 
     # Missing value info
     missing_info = df.isnull().sum().to_dict()
-    df = df.dropna(how="any")
+    # df = df.dropna(how="any")
     if df.shape[0] == 0:
         os.remove(file_path)
         raise HTTPException(status_code=400, detail="Uploaded file has no rows after cleaning")
@@ -192,12 +182,15 @@ async def model_eval(
     # Train the model
     if model_name not in ml.models:
         raise HTTPException(status_code=400, detail=f"Invalid model: {model_name}")
-    
-    manager = ml.models[model_name](df, test_split, **model_params)
-    result = manager.train(target, features)
+        
+    try:
+        manager = ml.models[model_name](df, test_split, **model_params)
+        result = manager.train(target, features)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
     # Get SQLAlchemy model/table class from mapping
-    model_table_class = MODEL_TABLES.get(model_name)
+    model_table_class = DefaultModel
     if model_table_class is None:
         raise HTTPException(status_code=400, detail=f"No DB table mapped for model: {model_name}")
 
@@ -416,3 +409,16 @@ def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_
         })
 
     return {"dataset1": results[0], "dataset2": results[1]}
+
+
+@router.get("/dashboard/plot/{plot_id}")
+def get_plot(plot_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plot = db.query(Plot).filter(Plot.id == plot_id).first()
+    if not plot:
+        raise HTTPException(status_code=404, detail="Plot not found")
+
+    # Optionally: check if plot belongs to current user
+    if plot.dataset.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed to access this plot")
+
+    return Response(content=plot.image, media_type="image/png")

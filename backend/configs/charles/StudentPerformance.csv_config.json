@@ -1,0 +1,26 @@
+{
+    "columns": [
+        "Hours Studied",
+        "Previous Scores",
+        "Extracurricular Activities",
+        "Sleep Hours",
+        "Sample Question Papers Practiced",
+        "Performance Index"
+    ],
+    "dtypes": {
+        "Hours Studied": "int64",
+        "Previous Scores": "int64",
+        "Extracurricular Activities": "object",
+        "Sleep Hours": "int64",
+        "Sample Question Papers Practiced": "int64",
+        "Performance Index": "float64"
+    },
+    "missing_values": {
+        "Hours Studied": 0,
+        "Previous Scores": 0,
+        "Extracurricular Activities": 0,
+        "Sleep Hours": 0,
+        "Sample Question Papers Practiced": 0,
+        "Performance Index": 0
+    }
+}
