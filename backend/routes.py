@@ -163,8 +163,8 @@ async def model_eval(
     filename = body.get("filename")
     target = body.get("target")
     features = body.get("features")
-    test_split = body.get("test_split"),
-    model_name = body.get("model"),
+    test_split = body.get("test_split")
+    model_name = body.get("model")
 
     model_params = body.get("params", {})  # hyperparameters
 
@@ -206,9 +206,6 @@ async def model_eval(
     # Return the result to the frontend
     # raise HTTPException(status_code=404, detail="Processed file not found")
 
-    df = pd.read_csv(file_path)
-    manager = ml.models[model_name](df, test_split, **model_params)
-    result = manager.train(target, features)
 
     # find dataset record (create if missing)
     dataset = db.query(Dataset).filter(Dataset.filename == filename, Dataset.owner_id == current_user.id).first()
@@ -336,8 +333,7 @@ def get_columns(
     user_folder = os.path.join("uploads", current_user.username)
     file_path = os.path.join(user_folder, filename + "_processed.csv")
 
-    print(filename)
-    print(file_path)
+
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"File {filename} not found")
 
