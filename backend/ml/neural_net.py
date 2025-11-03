@@ -17,7 +17,7 @@ class NeuralNetManager(ModelManager):
         activation: Literal["relu", "identity", "logistic", "tanh"] = "relu",
         solver: Literal["lbfgs", "sgd", "adam"] = "adam",
         lr: float = 0.001,
-        max_iter: int = 500,
+        max_iter: int = 1000,
         random_state: int = 42,
         classifier: bool = False,
         cv_folds: int = 5,
@@ -31,6 +31,7 @@ class NeuralNetManager(ModelManager):
         self.random_state = random_state
         self.classifier = classifier
         self.cv_folds = cv_folds
+        print(hidden_layer_sizes)
 
     def train(self, target, features):
         X, y = self.prepare_xy(features, target, classifier=self.classifier)

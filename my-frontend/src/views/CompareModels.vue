@@ -91,6 +91,9 @@
 /* Make Tabulator tables fit */
 .tabulator { font-size: 13px }
 
+.export-btn { background: #0ea5e9; color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer }
+.export-btn:hover { opacity: 0.9 }
+
 </style>
 
 <script setup>
@@ -136,15 +139,44 @@ async function onDatasetChange() {
 }
 
 function buildTableForObject(obj, containerId) {
-  const rows = Object.keys(obj || {}).map(k => ({ key: k, value: obj[k] }))
+  function formatValue(v) {
+    if (v === null || v === undefined) return ''
+    if (Array.isArray(v)) {
+      // Keep arrays readable but avoid huge output
+      if (v.length > 20) return JSON.stringify(v.slice(0, 20)) + '...'
+      return JSON.stringify(v)
+    }
+    if (typeof v === 'object') {
+      try {
+        const s = JSON.stringify(v)
+        return s.length > 200 ? s.slice(0, 200) + '...' : s
+      } catch (e) {
+        return String(v)
+      }
+    }
+    return String(v)
+  }
+
+  const rows = Object.keys(obj || {}).map(k => ({ key: k, value: formatValue(obj[k]) }))
   // clear container
   const container = document.getElementById(containerId)
   if (!container) return
   container.innerHTML = ''
+  // add small toolbar
+  const toolbar = document.createElement('div')
+  toolbar.style.display = 'flex'
+  toolbar.style.justifyContent = 'flex-end'
+  toolbar.style.marginBottom = '6px'
+  const exportBtn = document.createElement('button')
+  exportBtn.textContent = 'Export CSV'
+  exportBtn.className = 'export-btn'
+  toolbar.appendChild(exportBtn)
+  container.appendChild(toolbar)
+
   const table = document.createElement('div')
   container.appendChild(table)
 
-  new Tabulator(table, {
+  const tab = new Tabulator(table, {
     data: rows,
     layout: 'fitDataFill',
     columns: [
@@ -152,6 +184,11 @@ function buildTableForObject(obj, containerId) {
       { title: 'Value', field: 'value' }
     ],
     height: '200px',
+    clipboard: true,
+  })
+
+  exportBtn.addEventListener('click', () => {
+    tab.download('csv', `${containerId}.csv`)
   })
 }
 
@@ -185,8 +222,9 @@ function renderModelPlots(model, index) {
 
   if (model.metrics?.learning_curve) {
     const lc = model.metrics.learning_curve
-    const traceTrain = { x: lc.n_train, y: lc.train_score, mode: 'lines+markers', name: 'Train' }
-    const traceTest = { x: lc.n_train, y: lc.test_score, mode: 'lines+markers', name: 'Test' }
+    console.log(lc)
+    const traceTrain = { x: lc.train_sizes, y: lc.train_scores_mean, mode: 'lines+markers', name: 'Train' }
+    const traceTest = { x: lc.train_sizes, y: lc.test_scores_mean, mode: 'lines+markers', name: 'Test' }
     const layout = { title: 'Learning Curve', xaxis: { title: 'Training set size' }, yaxis: { title: 'Score' }, margin: { t: 30 } }
     Plotly.newPlot(`plot-lc-${index}`, [traceTrain, traceTest], layout, { responsive: true })
   }
