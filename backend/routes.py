@@ -186,3 +186,44 @@ def get_columns(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading CSV: {str(e)}")
 
+
+@router.get("/dashboard/datasets/models")
+def fetch_models(filename: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Returns a list of models that the current user has run on a given dataset.
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    
+    user_id = current_user.id
+    models_list = []
+
+    try:
+        # Query each model table
+        lr_models = db.query(LinearRegressionModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"LinearRegression_{m.id}" for m in lr_models])
+
+        logreg_models = db.query(LogisticRegressionModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"LogisticRegression_{m.id}" for m in logreg_models])
+
+        dt_models = db.query(DecisionTreeModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"DecisionTree_{m.id}" for m in dt_models])
+
+        bagging_models = db.query(BaggingModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"Bagging_{m.id}" for m in bagging_models])
+
+        boosting_models = db.query(BoostingModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"Boosting_{m.id}" for m in boosting_models])
+
+        rf_models = db.query(RandomForestModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"RandomForest_{m.id}" for m in rf_models])
+
+        svm_models = db.query(SVMModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"SVM_{m.id}" for m in svm_models])
+
+        dnn_models = db.query(UserDefinedDNNModel).filter_by(user_id=user_id, dataset=filename).all()
+        models_list.extend([f"UserDNN_{m.id}" for m in dnn_models])
+        return {"models": models_list}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")

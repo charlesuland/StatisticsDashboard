@@ -5,6 +5,7 @@ import Dataset from '@/views/Dataset.vue';
 import ModelEvaluation from '@/views/ModelEvaluation.vue';
 import Login from '@/views/Login.vue';
 import Register from '@/views/Register.vue';
+import CompareModels from '@/views/CompareModels.vue';
 
 const routes = [
     {path: "/", component: Index },
@@ -13,6 +14,7 @@ const routes = [
     {path: '/dashboard/modelevaluation', component: ModelEvaluation},
     {path: '/login', component: Login},
     {path: '/register', component: Register},
+    {path: '/dashboard/comparemodels', component: CompareModels},
 
 ];
 
