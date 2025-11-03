@@ -158,13 +158,14 @@ async def modelEval(request: Request, current_user: User = Depends(get_current_u
     features = body["features"]
     test_split = body["test_split"]
     model = body["model"]
+    model_params = body["model_params"]
 
     file_path = os.path.join("uploads", current_user.username, filename + "_processed.csv")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Processed file not found")
 
     df = pd.read_csv(file_path)
-    manager = ml.models[model](df, test_split)
+    manager = ml.models[model](df, test_split, **model_params)
     result = manager.train(target, features)
 
     # find dataset record (create if missing)
