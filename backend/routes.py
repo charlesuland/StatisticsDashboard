@@ -163,8 +163,7 @@ async def modelEval(request: Request, current_user: User = Depends(get_current_u
     df = pd.read_csv(file_path)
     manager = ml.models[model](df, test_split)
     result = manager.train(target, features)
-    print(result)
-    return 
+    return result
 
 @router.get("/dashboard/datasets/columns")
 def get_columns(
