@@ -13,22 +13,11 @@ import pandas as pd
 from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
-from models import BaggingModel, BoostingModel, Dataset, DecisionTreeModel, LinearRegressionModel, LogisticRegressionModel, RandomForestModel, SVMModel, User, UserDefinedDNNModel
+from models import Dataset, DefaultModel, Plot, User
 from sqlalchemy.orm import Session
 
 router = APIRouter()
 
-# Mapping from frontend model names to SQLAlchemy tables
-MODEL_TABLES = {
-    "linear_regression": "LinearRegressionModel",
-    "logistic_regression": "LogisticRegressionModel",
-    "decision_tree": "DecisionTreeModel",
-    "random_forest": "RandomForestModel",
-    "svm": "SVMModel",
-    "bagging": "BaggingModel",
-    "boosting": "BoostingModel",
-    "custom_dnn": "UserDefinedDNNModel"
-}
 
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 
@@ -174,8 +163,9 @@ async def model_eval(
     filename = body.get("filename")
     target = body.get("target")
     features = body.get("features")
-    test_split = body.get("test_split")
-    model_name = body.get("model")
+    test_split = body.get("test_split"),
+    model_name = body.get("model"),
+
     model_params = body.get("params", {})  # hyperparameters
 
     if not all([filename, target, features, model_name]):
@@ -196,13 +186,13 @@ async def model_eval(
     result = manager.train(target, features)
 
     # Dynamically get SQLAlchemy table
-    model_table_class = getattr(__import__("models", fromlist=[MODEL_TABLES[model_name]]), MODEL_TABLES[model_name])
+    model_table_class = DefaultModel
 
     # Save configuration and results to the specific model table
     model_entry = model_table_class(
         user_id=current_user.id,
         dataset=filename,
-        
+        model_type=model_name,
         parameters=model_params,
         metrics=result.get("metrics", {}),
         
@@ -217,7 +207,7 @@ async def model_eval(
     # raise HTTPException(status_code=404, detail="Processed file not found")
 
     df = pd.read_csv(file_path)
-    manager = ml.models[model](df, test_split, **model_params)
+    manager = ml.models[model_name](df, test_split, **model_params)
     result = manager.train(target, features)
 
     # find dataset record (create if missing)
@@ -360,83 +350,61 @@ def get_columns(
 
 
 @router.get("/dashboard/datasets/models")
-def fetch_models(filename: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def fetch_models(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Returns a list of models that the current user has run on a given dataset.
+    Return all models that the current user has trained on a specific dataset.
     """
     if not filename:
         raise HTTPException(status_code=400, detail="Filename is required")
-    
-    user_id = current_user.id
-    models_list = []
 
     try:
-        # Query each model table
-        lr_models = db.query(LinearRegressionModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"LinearRegression_{m.id}" for m in lr_models])
+        # Query all models from the unified Model table
+        models = (
+            db.query(DefaultModel)
+            .filter(DefaultModel.user_id == current_user.id, DefaultModel.dataset == filename)
+            .all()
+        )
 
-        logreg_models = db.query(LogisticRegressionModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"LogisticRegression_{m.id}" for m in logreg_models])
+        # Format response: include both model type and ID for clarity
+        model_list = [
+            f"{m.model_type}_{m.id}" for m in models
+        ]
 
-        dt_models = db.query(DecisionTreeModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"DecisionTree_{m.id}" for m in dt_models])
-
-        bagging_models = db.query(BaggingModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"Bagging_{m.id}" for m in bagging_models])
-
-        boosting_models = db.query(BoostingModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"Boosting_{m.id}" for m in boosting_models])
-
-        rf_models = db.query(RandomForestModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"RandomForest_{m.id}" for m in rf_models])
-
-        svm_models = db.query(SVMModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"SVM_{m.id}" for m in svm_models])
-
-        dnn_models = db.query(UserDefinedDNNModel).filter_by(user_id=user_id, dataset=filename).all()
-        models_list.extend([f"UserDNN_{m.id}" for m in dnn_models])
-        return {"models": models_list}
+        return {"models": model_list}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")
-    
-@router.post("/dashboard/compare_models")
-async def compare_models(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.get("/dashboard/compare_models")
+def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """
+    Compare two models by their primary key IDs.
+    Returns config, metrics, training time, and model type for each.
+    """
+    if len(model_ids) != 2:
+        raise HTTPException(status_code=400, detail="Must provide exactly 2 model IDs")
 
-    body = await request.json()
-    dataset_name = body.get("dataset")
-    models = body.get("models")
-
-    if not dataset_name or not models or len(models) != 2:
-        raise HTTPException(status_code=400, detail="Must provide dataset and exactly two models.")
-
-    comparison_results = {}
-
-    for model_name in models:
-        table_class = MODEL_TABLES.get(model_name)
-        if not table_class:
-            raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
-
-        # Query the **latest trained model** for this user and dataset
-        model_instance = (
-            db.query(table_class)
-            .filter(table_class.user_id == current_user.id)
-            .filter(table_class.dataset == dataset_name)
-            .order_by(table_class.id.desc())  # latest first
+    results = []
+    for model_id in model_ids:
+        model = (
+            db.query(DefaultModel)
+            .filter(DefaultModel.id == model_id, DefaultModel.user_id == current_user.id)
             .first()
         )
+        if not model:
+            raise HTTPException(status_code=404, detail=f"Model with ID {model_id} not found for user")
 
-        if not model_instance:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No trained {model_name} model found for dataset {dataset_name}"
-            )
+        results.append({
+            "model_id": model.id,
+            
+            "model_type": model.model_type,      # e.g., "linear_regression", "decision_tree"
+            "training_time": model.training_time,
+            "config": model.config,              # stored JSON/dict
+            "metrics": model.metrics,            # stored JSON/dict
+                 
+        })
 
-        # Build the response mapping model name -> metrics, config, training_time
-        comparison_results[model_name] = {
-            "training_time": model_instance.training_time,
-            "config": model_instance.config,       # JSON stored in DB
-            "metrics": model_instance.metrics,     # JSON stored in DB
-        }
-
-    return comparison_results
+    return {"dataset1": results[0], "dataset2": results[1]}
