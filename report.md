@@ -28,7 +28,7 @@ The primary goals are: fast iteration over different model classes, consistent p
 
 - Database and server
 	- SQLite via SQLAlchemy (file `app.db` created in `backend/` on startup). No migration tooling included; the app calls `Base.metadata.create_all(bind=engine)` in `backend/main.py`.
-	- FastAPI backend served by Uvicorn during development: `uvicorn main:app --reload --host 0.0.0.0 --port 8000`.
+	- FastAPI backend.
 
 - Languages and frameworks
 	- Backend: Python 3.x, FastAPI, SQLAlchemy, pandas, scikit-learn, matplotlib, shap (optional).
@@ -75,7 +75,7 @@ Key data flows:
 This app implements several model classes (logistic regression, linear regression, decision trees, bagging, boosting, random forest, SVM, and a basic neural net manager). Below I compare approaches and connect them to the repository's design choices.
 
 1) Tree ensembles (Random Forest, Bagging, Boosting)
-	 - Strengths: handle mixed datatypes, robust to outliers, provide feature importances via `feature_importances_`, often strong off-the-shelf performance, less need for scaling or heavy preprocessing.
+	 - Strengths: handle mixed datatypes, robust to outliers, provide feature importances via `feature_importances`, often strong off-the-shelf performance, less need for scaling or heavy preprocessing.
 	 - In this repo: `RandForestManager` and `BaggingManager` benefit from the `ModelManager.sanitize` (especially handling categorical codes and datetime conversion), and SHAP's `TreeExplainer` can be used to produce SHAP summaries quickly.
 	 - Trade-offs: ensembles are heavier computationally and can be memory intensive for large datasets. The current learning-curve computation (learning_curve with cv=3) can be expensive; the code runs with n_jobs=1 to limit parallelism.
 

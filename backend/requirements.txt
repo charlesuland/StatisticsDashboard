@@ -2,7 +2,8 @@ fastapi
 uvicorn
 python-multipart
 sqlalchemy
+bcrypt
 python-jose
 shap
-sklearn
+scikit-learn
 matplotlib
