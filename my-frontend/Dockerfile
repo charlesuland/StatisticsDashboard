@@ -1,8 +1,17 @@
 # Build stage
 FROM node:20-alpine as build
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-COPY package.json package-lock.json* ./
-COPY . .
+RUN git clone https://github.com/charlesuland/StatisticsDashboard.git
+RUN mv StatisticsDashboard/my-frontend/* . && rm -rf StatisticsDashboard
+
 RUN npm ci --prefer-offline --no-audit --progress=false
 RUN npm run build
 
