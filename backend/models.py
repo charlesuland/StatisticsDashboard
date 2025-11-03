@@ -10,7 +10,6 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
 
     # link to datasets
@@ -62,6 +61,7 @@ class Plot(Base):
     dataset_id = Column(Integer, ForeignKey("datasets.id"), index=True, nullable=True)
     name = Column(String, index=True)  # e.g., "roc_curve", "confusion_matrix"
     image = Column(LargeBinary)  # PNG bytes
+    data = Column(JSON, nullable=True)  # structured numeric plot data (returned to client)
 
     user = relationship("User", back_populates="plots")
     dataset = relationship("Dataset", back_populates="plots")

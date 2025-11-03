@@ -1,8 +1,9 @@
 <template>
   <div class="ml-dashboard">
-    <!-- Dataset Selection -->
-    <div class="card">
-      <h2>Dataset Selection</h2>
+    <div class="left-column">
+      <!-- Dataset Selection -->
+      <div class="card">
+        <h2>Dataset Selection</h2>
       <div class="form-group">
         <label for="dataset-select">Choose a dataset:</label>
         <select id="dataset-select" v-model="selectedDataset" @change="onFileChange">
@@ -33,10 +34,10 @@
         <label for="testSplit">Test set percentage: {{ testSplit }}%</label>
         <input type="range" id="testSplit" min="10" max="40" v-model="testSplit" />
       </div>
-    </div>
+      </div>
 
-    <!-- Model Selection -->
-    <div class="card">
+      <!-- Model Selection -->
+      <div class="card">
       <h2>Model Selection</h2>
       <div class="form-group">
         <label for="model">Choose ML Model:</label>
@@ -84,59 +85,35 @@
 
       <button :disabled="!canSubmit" @click="submitOptions" class="train-btn">Train Model</button>
       <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
+      </div>
     </div>
 
-    <!-- Model Results -->
-    <div v-if="modelResults" class="card results-card">
+    <div class="right-column">
+      <!-- Model Results -->
+      <div v-if="modelResults" class="card results-card">
       <h2>Model Evaluation Results</h2>
 
       <!-- Metrics -->
-      <section v-if="hasMetrics(modelResults)">
-        <h3>Performance Metrics</h3>
-        <ul>
-          <li><strong>R²:</strong> {{ modelResults.r2 }}</li>
-          <li><strong>MSE:</strong> {{ modelResults.mse }}</li>
-          <li><strong>MAE:</strong> {{ modelResults.mae }}</li>
-        </ul>
+        <section v-if="hasMetrics(modelResults)">
+          <h3>Performance Metrics</h3>
+          <div id="metrics-table"></div>
+        </section>
+
+      <section v-if="modelResults && (modelResults.cv_mean || modelResults.cv_std)">
+        <h3>Cross-Validation</h3>
+        <div id="cv-table"></div>
       </section>
 
-      <!-- Cross-Validation -->
-      <section v-if="modelResults.cv_mean">
-        <h3>Cross-Validation (Mean)</h3>
-        <ul>
-          <li>R² Mean: {{ modelResults.cv_mean.r2_mean }}</li>
-          <li>MSE Mean: {{ modelResults.cv_mean.mse_mean }}</li>
-          <li>MAE Mean: {{ modelResults.cv_mean.mae_mean }}</li>
-        </ul>
-      </section>
-
-      <section v-if="modelResults.cv_std">
-        <h3>Cross-Validation (Std)</h3>
-        <ul>
-          <li>R² Std: {{ modelResults.cv_std.r2_std }}</li>
-          <li>MSE Std: {{ modelResults.cv_std.mse_std }}</li>
-          <li>MAE Std: {{ modelResults.cv_std.mae_std }}</li>
-        </ul>
-      </section>
-
-      <!-- Feature Importance -->
-      <section v-if="modelResults.feature_importance && modelResults.feature_importance.length">
+      <section v-if="modelResults && modelResults.feature_importance && modelResults.feature_importance.length">
         <h3>Feature Importance</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Feature</th>
-              <th>Importance</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="f in modelResults.feature_importance" :key="f.name">
-              <td>{{ f.name }}</td>
-              <td>{{ f.importance }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div id="feature-table"></div>
       </section>
+        
+        <!-- Model Parameters (table) -->
+        <section v-if="modelResults.parameters && Object.keys(modelResults.parameters).length">
+          <h3>Model Parameters</h3>
+          <div id="params-table"></div>
+        </section>
 
       <!-- Learning Curve -->
       <section v-if="modelResults.learning_curve">
@@ -148,28 +125,41 @@
         </div>
       </section>
 
-      <!-- Plots -->
-      <section v-if="modelResults.plots && modelResults.plots.length">
-        <h3>Generated Plots</h3>
+      <!-- Client-side Plots -->
+      <section v-if="modelResults.plot_data && modelResults.plot_data.length">
+        <h3>Plots</h3>
         <div class="plots">
-          <div v-for="plot in modelResults.plots" :key="plot.id" class="plot-card">
-            <p>{{ plot.name }}</p>
-            <img :src="plot.url" alt="Plot image" />
+          <div v-for="(pd, idx) in modelResults.plot_data" :key="pd.key" class="plot-card">
+            <p>{{ pd.name }}</p>
+            <div :id="'plot-' + idx" class="plot-div"></div>
           </div>
         </div>
       </section>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .ml-dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px 30px;
   font-family: Arial, sans-serif;
   padding: 20px;
   background-color: #f4f6f8;
+}
+
+.left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 /* Card layout */
@@ -276,7 +266,7 @@ th {
   background: #f9f9f9;
   border-radius: 10px;
   padding: 10px;
-  width: 250px;
+  width: 100%;
   text-align: center;
 }
 
@@ -295,19 +285,16 @@ th {
 
 /* Range input styling */
 input[type="range"] {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 6px;
+  width: 50%;
+  height: 3px;
   background: #ddd;
-  border-radius: 3px;
+  border-radius: 100px;
   outline: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: #667eea;
   cursor: pointer;
@@ -321,9 +308,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 
 <script setup>
-import { ref, onMounted, computed, reactive, watch } from "vue";
+import { ref, onMounted, computed, reactive, watch, nextTick } from "vue";
 import axios from "axios";
 import Chart from "chart.js/auto";
+import Plotly from 'plotly.js-dist-min';
+import "tabulator-tables/dist/css/tabulator_simple.css";
+import {TabulatorFull as Tabulator} from 'tabulator-tables';
 
 const learningChart = ref(null);
 // Reactive state
@@ -500,12 +490,74 @@ async function submitOptions() {
 
       // Now assign to reactive modelResults
       modelResults.value = results;
+        // Render client-side plots from structured numeric data
+        if (modelResults.value.plot_data && modelResults.value.plot_data.length) {
+          await nextTick();
+          modelResults.value.plot_data.forEach((pd, idx) => {
+            try {
+              renderPlot(pd, idx);
+            } catch (e) {
+              console.error('Failed to render plot', pd.key, e);
+            }
+          });
+        }
+
+        // Build Tabulator tables for results
+        try {
+          await nextTick();
+          buildTables(modelResults.value);
+        } catch (e) {
+          console.error('Failed building tables', e);
+        }
       // Fetch plot images for each plot in results
     }
   } catch (error) {
     console.error("Failed to submit options:", error);
   }
 };
+
+  function renderPlot(pd, idx) {
+    const el = document.getElementById('plot-' + idx);
+    if (!el) return;
+
+    const type = pd.type;
+    let data = [];
+    let layout = {margin: {t: 30, b: 40}, autosize: true};
+
+    if (type === 'roc') {
+      data = [
+        { x: pd.data.fpr, y: pd.data.tpr, mode: 'lines', name: `ROC (AUC=${pd.data.auc || 'n/a'})` },
+        { x: [0,1], y: [0,1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false }
+      ];
+      layout.xaxis = { title: 'FPR' };
+      layout.yaxis = { title: 'TPR' };
+    } else if (type === 'pr') {
+      data = [ { x: pd.data.recall, y: pd.data.precision, mode: 'lines', name: `PR (AP=${pd.data.ap || 'n/a'})` } ];
+      layout.xaxis = { title: 'Recall' };
+      layout.yaxis = { title: 'Precision' };
+    } else if (type === 'confusion_matrix') {
+      data = [ { z: pd.data.matrix, type: 'heatmap', colorscale: 'Blues' } ];
+      layout.xaxis = { title: 'Predicted' };
+      layout.yaxis = { title: 'Actual' };
+    } else if (type === 'learning_curve') {
+      data = [
+        { x: pd.data.train_sizes, y: pd.data.train_scores_mean, mode: 'lines+markers', name: 'Train' },
+        { x: pd.data.train_sizes, y: pd.data.test_scores_mean, mode: 'lines+markers', name: 'Test' }
+      ];
+      layout.xaxis = { title: 'Training Samples' };
+      layout.yaxis = { title: 'Score' };
+    } else if (type === 'feature_importance' || type === 'shap_summary') {
+      const names = pd.data.map(d => d.name);
+      const vals = pd.data.map(d => d.importance ?? d.mean_abs_shap ?? d.value ?? 0);
+      data = [ { x: vals.reverse(), y: names.reverse(), type: 'bar', orientation: 'h' } ];
+      layout.xaxis = { title: type === 'shap_summary' ? 'Mean |SHAP value|' : 'Importance' };
+    } else {
+      el.innerText = 'Unsupported plot type: ' + type;
+      return;
+    }
+
+    Plotly.newPlot(el, data, layout, {responsive: true});
+  }
 
 // Watch for model change and reset params
 watch(selectedModel, (newModel) => {
@@ -572,5 +624,139 @@ watch(modelResults, (newVal) => {
     });
   }
 });
+
+function buildTables(results) {
+  // Metrics
+  const metricsData = [];
+  if (results.r2 !== undefined) metricsData.push({metric: 'R²', value: results.r2});
+  if (results.mse !== undefined) metricsData.push({metric: 'MSE', value: results.mse});
+  if (results.mae !== undefined) metricsData.push({metric: 'MAE', value: results.mae});
+
+  // Destroy previous table if exists
+  if (window.metricsTable) { window.metricsTable.destroy(); }
+  window.metricsTable = new Tabulator('#metrics-table', {
+    data: metricsData,
+    layout: 'fitColumns',
+    columns: [
+      {title: 'Metric', field: 'metric', headerFilter: true},
+      {title: 'Value', field: 'value', hozAlign: 'left', sorter: 'number'},
+    ],
+    movableColumns: true,
+  });
+
+  // Add or update toolbar with export button (avoid duplicates)
+  (function(){
+    const toolbarId = 'metrics-table-toolbar';
+    const metricsEl = document.getElementById('metrics-table');
+    if (!metricsEl) return;
+    let toolbar = document.getElementById(toolbarId);
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = toolbarId;
+      toolbar.style.marginBottom = '8px';
+      metricsEl.parentNode.insertBefore(toolbar, metricsEl);
+    } else {
+      toolbar.innerHTML = '';
+    }
+    const btn = document.createElement('button');
+    btn.innerText = 'Export CSV';
+    btn.onclick = () => window.metricsTable.download('csv', 'metrics.csv');
+    toolbar.appendChild(btn);
+  })();
+
+  // CV table
+  const cvData = [
+    {metric: 'R²', mean: results.cv_mean?.r2_mean ?? null, std: results.cv_std?.r2_std ?? null},
+    {metric: 'MSE', mean: results.cv_mean?.mse_mean ?? null, std: results.cv_std?.mse_std ?? null},
+    {metric: 'MAE', mean: results.cv_mean?.mae_mean ?? null, std: results.cv_std?.mae_std ?? null},
+  ];
+  if (window.cvTable) { window.cvTable.destroy(); }
+  window.cvTable = new Tabulator('#cv-table', {
+    data: cvData,
+    layout: 'fitColumns',
+    columns: [
+      {title: 'Metric', field: 'metric'},
+      {title: 'Mean', field: 'mean', sorter: 'number'},
+      {title: 'Std', field: 'std', sorter: 'number'},
+    ],
+  });
+
+  (function(){
+    const toolbarId = 'cv-table-toolbar';
+    const cvEl = document.getElementById('cv-table');
+    if (!cvEl) return;
+    let toolbar = document.getElementById(toolbarId);
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = toolbarId;
+      toolbar.style.marginBottom = '8px';
+      cvEl.parentNode.insertBefore(toolbar, cvEl);
+    } else {
+      toolbar.innerHTML = '';
+    }
+    const btn = document.createElement('button');
+    btn.innerText = 'Export CSV';
+    btn.onclick = () => window.cvTable.download('csv', 'cv.csv');
+    toolbar.appendChild(btn);
+  })();
+
+  // Feature importance
+  const feat = (results.feature_importance || []).map(f => ({feature: f.name, importance: f.importance}));
+  if (window.featureTable) { window.featureTable.destroy(); }
+  window.featureTable = new Tabulator('#feature-table', {
+    data: feat,
+    layout: 'fitColumns',
+    columns: [
+      {title: 'Feature', field: 'feature', headerFilter: true},
+      {title: 'Importance', field: 'importance', sorter: 'number'},
+    ],
+  });
+  (function(){
+    const toolbarId = 'feature-table-toolbar';
+    const featEl = document.getElementById('feature-table');
+    if (!featEl) return;
+    let toolbar = document.getElementById(toolbarId);
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = toolbarId;
+      toolbar.style.marginBottom = '8px';
+      featEl.parentNode.insertBefore(toolbar, featEl);
+    } else {
+      toolbar.innerHTML = '';
+    }
+    const btn = document.createElement('button');
+    btn.innerText = 'Export CSV';
+    btn.onclick = () => window.featureTable.download('csv', 'feature_importance.csv');
+    toolbar.appendChild(btn);
+  })();
+
+  // Parameters table
+  const params = [];
+  for (const k in results.parameters || {}) params.push({param: k, value: results.parameters[k]});
+  if (window.paramsTable) { window.paramsTable.destroy(); }
+  window.paramsTable = new Tabulator('#params-table', {
+    data: params,
+    layout: 'fitColumns',
+    columns: [ {title: 'Parameter', field: 'param'}, {title: 'Value', field: 'value'} ]
+  });
+  (function(){
+    const toolbarId = 'params-table-toolbar';
+    const paramsEl = document.getElementById('params-table');
+    if (!paramsEl) return;
+    let toolbar = document.getElementById(toolbarId);
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = toolbarId;
+      toolbar.style.marginBottom = '8px';
+      paramsEl.parentNode.insertBefore(toolbar, paramsEl);
+    } else {
+      toolbar.innerHTML = '';
+    }
+    const btn = document.createElement('button');
+    btn.innerText = 'Export CSV';
+    btn.onclick = () => window.paramsTable.download('csv', 'parameters.csv');
+    toolbar.appendChild(btn);
+  })();
+}
 </script>
 

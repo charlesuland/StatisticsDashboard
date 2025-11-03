@@ -4,7 +4,12 @@
     <div class="upload-section card">
       <h3>Upload a Dataset</h3>
       <input type="file" @change="onFileChange" />
-      <button @click="uploadFile" :disabled="!selectedFile">Upload</button>
+      <div style="margin-top:10px;">
+        <label for="customName">Custom filename (optional):</label>
+        <input id="customName" v-model="customName" type="text" placeholder="my_dataset.csv"  />
+        <div v-if="customName && !isCustomNameValid" style="color: #e74c3c; margin-top:6px">Invalid filename — use letters, numbers, spaces, . _ - and max 100 chars. No slashes.</div>
+      </div>
+      <button @click="uploadFile" :disabled="!selectedFile || (customName !== '' && !isCustomNameValid)">Upload</button>
       <p v-if="uploadStatus" class="status">{{ uploadStatus }}</p>
     </div>
 
@@ -25,9 +30,21 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const selectedFile = ref(null);
+const customName = ref('');
 const uploadStatus = ref('');
 const files = ref([]);
 const token = localStorage.getItem("token"); 
+
+// Validation rules
+const MAX_FILENAME_LENGTH = 100;
+const filenameRegex = /^[A-Za-z0-9 _.-]+$/; // allow letters, numbers, space, dot, underscore, dash
+
+const isCustomNameValid = (name => {
+  if (!name) return true;
+  if (name.length > MAX_FILENAME_LENGTH) return false;
+  if (name.includes('/') || name.includes('\\')) return false;
+  return filenameRegex.test(name);
+});
 
 function onFileChange(event) {
   selectedFile.value = event.target.files[0];
@@ -37,7 +54,17 @@ async function uploadFile() {
   if (!selectedFile.value) return;
 
   const formData = new FormData();
-  formData.append('file', selectedFile.value);
+  let filenameToUse = null;
+  if (customName.value && customName.value.trim().length > 0) {
+    filenameToUse = customName.value.trim();
+    // auto-append .csv if user omitted extension
+    if (!/\.[a-zA-Z0-9]{1,5}$/.test(filenameToUse)) filenameToUse += '.csv';
+  }
+  if (filenameToUse) {
+    formData.append('file', selectedFile.value, filenameToUse);
+  } else {
+    formData.append('file', selectedFile.value);
+  }
 
   try {
     const response = await axios.post(
@@ -46,7 +73,10 @@ async function uploadFile() {
       { headers: { 'Content-Type': 'multipart/form-data',  Authorization: `Bearer ${token}`} }
     );
 
-    uploadStatus.value = `Upload successful: ${response.data.filename}`;
+  uploadStatus.value = `Upload successful: ${response.data.filename}`;
+  // clear selection and custom name
+  selectedFile.value = null;
+  customName.value = '';
   } catch (error) {
     console.error(error);
     uploadStatus.value = 'Upload failed';
