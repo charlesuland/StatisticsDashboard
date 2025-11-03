@@ -167,7 +167,6 @@ async def add_user_dataset(
     }
 
 @router.post("/dashboard/modelevaluation")
-<<<<<<< HEAD
 async def model_eval(
     request: Request,
     db: Session = Depends(get_db),
@@ -182,17 +181,6 @@ async def model_eval(
     test_split = body.get("test_split")
     model_name = body.get("model")
     model_params = body.get("params", {})  # hyperparameters
-=======
-async def modelEval(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # get necessary information from request
-    body = await request.json()
-    filename = body["filename"]
-    target = body["target"]
-    features = body["features"]
-    test_split = body["test_split"]
-    model = body["model"]
-    model_params = body["model_params"]
->>>>>>> be56350e520610d0d717723af99c49930bfd2e79
 
     if not all([filename, target, features, model_name]):
         raise HTTPException(status_code=400, detail="Missing required fields")
@@ -200,7 +188,6 @@ async def modelEval(request: Request, current_user: User = Depends(get_current_u
     # Load processed dataset
     file_path = os.path.join("uploads", current_user.username, filename + "_processed.csv")
     if not os.path.exists(file_path):
-<<<<<<< HEAD
         raise HTTPException(status_code=404, detail="Dataset not found")
     
     df = pd.read_csv(file_path)
@@ -231,7 +218,6 @@ async def modelEval(request: Request, current_user: User = Depends(get_current_u
     db.refresh(model_entry)
 
     # Return the result to the frontend
-=======
         raise HTTPException(status_code=404, detail="Processed file not found")
 
     df = pd.read_csv(file_path)
@@ -354,7 +340,6 @@ async def modelEval(request: Request, current_user: User = Depends(get_current_u
         pass
 
     result["plots"] = saved_plots
->>>>>>> be56350e520610d0d717723af99c49930bfd2e79
     return result
 
 @router.get("/dashboard/datasets/columns")
