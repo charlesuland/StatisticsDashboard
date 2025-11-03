@@ -25,7 +25,34 @@
     </button>
 
     <!-- Show comparison results -->
-    <pre v-if="comparisonResult">{{ comparisonResult }}</pre>
+    <div v-if="comparisonResult">
+  <h3>Model Comparison for Dataset: {{ selectedDataset }}</h3>
+
+  <div v-for="(model, index) in comparisonResult" :key="index" class="model-comparison">
+    <h4>Model {{ index + 1 }}: {{ model.model_name }}</h4>
+    <p><strong>Training Time:</strong> {{ model.training_time }} seconds</p>
+    
+    <div>
+      <strong>Configuration:</strong>
+      <ul>
+        <li v-for="(value, key) in model.config" :key="key">
+          {{ key }}: {{ value }}
+        </li>
+      </ul>
+    </div>
+
+    <div>
+      <strong>Metrics:</strong>
+      <ul>
+        <li v-for="(value, key) in model.metrics" :key="key">
+          {{ key }}: {{ value }}
+        </li>
+      </ul>
+    </div>
+
+    <hr />
+  </div>
+</div>
   </div>
 </template>
 
@@ -39,6 +66,7 @@ const token = localStorage.getItem("token") // JWT from login
 const availableModels = ref([])
 const selectedModels = ref([])
 const comparisonResult = ref(null)
+
 
 // Fetch all datasets on mount
 async function fetchDatasets() {
@@ -67,21 +95,30 @@ async function onDatasetChange() {
   }
 }
 
-// Send the selected models to the backend for comparison
 async function compareModels() {
-  if (selectedModels.value.length !== 2) return
+  if (selectedModels.value.length !== 2) {
+    alert("Please select exactly two models to compare.");
+    return;
+  }
 
   try {
     const payload = {
       dataset: selectedDataset.value,
-      models: selectedModels.value
-    }
-    const response = await axios.post('http://localhost:8000/dashboard/modelevaluation', payload, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    comparisonResult.value = response.data
+      models: selectedModels.value, // array of model names or IDs
+    };
+
+    const response = await axios.post(
+      "http://localhost:8000/dashboard/compare_models",
+      payload,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    // response should contain an array of two objects with dataset, time, config, metrics
+    comparisonResult.value = response.data; 
   } catch (error) {
-    console.error("Failed to compare models:", error)
+    console.error("Failed to compare models:", error);
   }
 }
 

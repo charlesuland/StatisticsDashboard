@@ -399,3 +399,44 @@ def fetch_models(filename: str, db: Session = Depends(get_db), current_user: Use
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")
+    
+@router.post("/dashboard/compare_models")
+async def compare_models(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+
+    body = await request.json()
+    dataset_name = body.get("dataset")
+    models = body.get("models")
+
+    if not dataset_name or not models or len(models) != 2:
+        raise HTTPException(status_code=400, detail="Must provide dataset and exactly two models.")
+
+    comparison_results = {}
+
+    for model_name in models:
+        table_class = MODEL_TABLES.get(model_name)
+        if not table_class:
+            raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+
+        # Query the **latest trained model** for this user and dataset
+        model_instance = (
+            db.query(table_class)
+            .filter(table_class.user_id == current_user.id)
+            .filter(table_class.dataset == dataset_name)
+            .order_by(table_class.id.desc())  # latest first
+            .first()
+        )
+
+        if not model_instance:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No trained {model_name} model found for dataset {dataset_name}"
+            )
+
+        # Build the response mapping model name -> metrics, config, training_time
+        comparison_results[model_name] = {
+            "training_time": model_instance.training_time,
+            "config": model_instance.config,       # JSON stored in DB
+            "metrics": model_instance.metrics,     # JSON stored in DB
+        }
+
+    return comparison_results
