@@ -1,4 +1,5 @@
 import csv
+import datetime
 import json
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,10 +9,22 @@ import pandas as pd
 from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
-from models import Dataset, User
+from models import BaggingModel, BoostingModel, Dataset, DecisionTreeModel, LinearRegressionModel, LogisticRegressionModel, RandomForestModel, SVMModel, User, UserDefinedDNNModel
 from sqlalchemy.orm import Session
 
 router = APIRouter()
+
+# Mapping from frontend model names to SQLAlchemy tables
+MODEL_TABLES = {
+    "linear_regression": "LinearRegressionModel",
+    "logistic_regression": "LogisticRegressionModel",
+    "decision_tree": "DecisionTreeModel",
+    "random_forest": "RandomForestModel",
+    "svm": "SVMModel",
+    "bagging": "BaggingModel",
+    "boosting": "BoostingModel",
+    "custom_dnn": "UserDefinedDNNModel"
+}
 
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 
@@ -146,23 +159,57 @@ async def add_user_dataset(
     }
 
 @router.post("/dashboard/modelevaluation")
-async def modelEval(request: Request, current_user: User = Depends(get_current_user)):
-    # get necessary information from request
-        # need which model and which dataset
-    #perform necessary python and sklearn calcualations
-    # return that data
-    # how do we want to visualize it?
+async def model_eval(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     body = await request.json()
-    filename = body["filename"]
-    target = body["target"]
-    features = body["features"]
-    test_split = body["test_split"]
-    model = body["model"]
+    
+    # Extract frontend inputs
+    filename = body.get("filename")
+    target = body.get("target")
+    features = body.get("features")
+    test_split = body.get("test_split")
+    model_name = body.get("model")
+    model_params = body.get("params", {})  # hyperparameters
 
+    if not all([filename, target, features, model_name]):
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Load processed dataset
     file_path = os.path.join("uploads", current_user.username, filename + "_processed.csv")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
     df = pd.read_csv(file_path)
-    manager = ml.models[model](df, test_split)
+
+    # Train the model
+    if model_name not in ml.models:
+        raise HTTPException(status_code=400, detail=f"Invalid model: {model_name}")
+    
+    manager = ml.models[model_name](df, test_split, **model_params)
     result = manager.train(target, features)
+
+    # Dynamically get SQLAlchemy table
+    model_table_class = getattr(__import__("models", fromlist=[MODEL_TABLES[model_name]]), MODEL_TABLES[model_name])
+
+    # Save configuration and results to the specific model table
+    model_entry = model_table_class(
+        user_id=current_user.id,
+        dataset=filename,
+        
+        parameters=model_params,
+        metrics=result.get("metrics", {}),
+        
+        created_at=datetime.datetime.utcnow()
+    )
+
+    db.add(model_entry)
+    db.commit()
+    db.refresh(model_entry)
+
+    # Return the result to the frontend
     return result
 
 @router.get("/dashboard/datasets/columns")
