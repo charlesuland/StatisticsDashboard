@@ -34,7 +34,7 @@ class NeuralNetManager(ModelManager):
         random_state: int = 42,
         classifier: bool = False,
     ):
-        self.df = dataframe
+        self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
         self.hidden_layer_sizes = hidden_layer_sizes
         self.activation = activation

@@ -8,7 +8,7 @@ from backend.ml import ModelManager
 
 class LinRegManager(ModelManager):
     def __init__(self, dataframe: pd.DataFrame, test_split, fit_intercept: bool = True):
-        self.df = dataframe
+        self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
         self.fit_intercept = fit_intercept
 

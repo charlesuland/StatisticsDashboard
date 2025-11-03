@@ -30,7 +30,7 @@ class BoostingManager(ModelManager):
         random_state: int = 42,
         classifier: bool = False,
     ):
-        self.df = dataframe
+        self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate

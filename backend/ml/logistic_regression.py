@@ -29,7 +29,7 @@ class LogRegManager(ModelManager):
         ] = "lbfgs",
         max_iter: int = 1000,
     ):
-        self.df = dataframe
+        self.df = self.sanitize(dataframe)
         self.test_split = test_split / 100
         self.penalty = penalty
         self.C = C
