@@ -75,4 +75,17 @@ class LogRegManager(ModelManager):
                 "precision": precision.tolist(),
                 "recall": recall.tolist(),
             }
+        try:
+            eval_artifacts = self.evaluate_model(
+                model,
+                X_train,
+                X_test,
+                y_train,
+                y_test,
+                is_classifier=True,
+                feature_names=features,
+            )
+            result.update(eval_artifacts)
+        except Exception:
+            pass
         return result

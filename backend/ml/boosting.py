@@ -42,11 +42,7 @@ class BoostingManager(ModelManager):
         y = self.df[target].copy()
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X,
-            y,
-            test_size=self.test_split,
-            random_state=self.random_state,
-            stratify=y if self.classifier else None,
+            X, y, test_size=self.test_split, random_state=self.random_state, stratify=y if self.classifier else None
         )
 
         if self.classifier:
@@ -75,10 +71,12 @@ class BoostingManager(ModelManager):
                 fpr, tpr, _ = roc_curve(y_test, y_proba)
                 precision, recall, _ = precision_recall_curve(y_test, y_proba)
                 result["roc_curve"] = {"fpr": fpr.tolist(), "tpr": tpr.tolist()}
-                result["pr_curve"] = {
-                    "precision": precision.tolist(),
-                    "recall": recall.tolist(),
-                }
+                result["pr_curve"] = {"precision": precision.tolist(), "recall": recall.tolist()}
+            try:
+                eval_artifacts = self.evaluate_model(model, X_train, X_test, y_train, y_test, is_classifier=True, feature_names=features)
+                result.update(eval_artifacts)
+            except Exception:
+                pass
             return result
         else:
             model = AdaBoostRegressor(
@@ -89,8 +87,14 @@ class BoostingManager(ModelManager):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
-            return {
+            result: dict[str, Any] = {
                 "r2": float(r2_score(y_test, y_pred)),
                 "mse": float(mean_squared_error(y_test, y_pred)),
                 "mae": float(mean_absolute_error(y_test, y_pred)),
             }
+            try:
+                eval_artifacts = self.evaluate_model(model, X_train, X_test, y_train, y_test, is_classifier=False, feature_names=features)
+                result.update(eval_artifacts)
+            except Exception:
+                pass
+            return result
