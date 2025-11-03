@@ -323,7 +323,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 <script setup>
 import { ref, onMounted, computed, reactive, watch } from "vue";
 import axios from "axios";
+import Chart from "chart.js/auto";
 
+const learningChart = ref(null);
 // Reactive state
 const datasets = ref([]);
 const columns = ref([]);
@@ -368,6 +370,7 @@ function onFileChange() {
 
 onMounted(() => {
   fetchDatasets();
+  
 });
 
 // Model options
@@ -533,5 +536,41 @@ async function fetchPlotImage(plotId) {
 
   return URL.createObjectURL(response.data);
 }
+let chartInstance = null;
+
+// Watch modelResults for when the learning curve becomes available
+watch(modelResults, (newVal) => {
+  if (newVal && newVal.learning_curve && learningChart.value) {
+    if (chartInstance) chartInstance.destroy(); // destroy previous chart if exists
+
+    chartInstance = new Chart(learningChart.value.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: newVal.learning_curve.train_sizes,
+        datasets: [
+          {
+            label: "Training Score",
+            data: newVal.learning_curve.train_scores_mean,
+            borderColor: "blue",
+            fill: false,
+          },
+          {
+            label: "Validation Score",
+            data: newVal.learning_curve.test_scores_mean,
+            borderColor: "orange",
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { title: { display: true, text: "Training Set Size" } },
+          y: { title: { display: true, text: "Score" }, min: 0, max: 1 },
+        },
+      },
+    });
+  }
+});
 </script>
 
