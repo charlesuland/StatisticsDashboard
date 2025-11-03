@@ -367,7 +367,7 @@ def fetch_models(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching models: {str(e)}")
 @router.get("/dashboard/compare_models")
-def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def compare_models(model_ids: list[int] = Query(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Compare two models by their primary key IDs.
     Returns config, metrics, training time, and model type for each.
@@ -387,12 +387,12 @@ def compare_models(model_ids: list[int], db: Session = Depends(get_db), current_
 
         results.append({
             "model_id": model.id,
-            
             "model_type": model.model_type,      # e.g., "linear_regression", "decision_tree"
-            "training_time": model.training_time,
-            "config": model.config,              # stored JSON/dict
-            "metrics": model.metrics,            # stored JSON/dict
-                 
+            # training_time may not exist on older records, so use getattr with default
+            "training_time": getattr(model, "training_time", None),
+            # use stored parameters and metrics columns
+            "config": model.parameters,
+            "metrics": model.metrics,
         })
 
     return {"dataset1": results[0], "dataset2": results[1]}

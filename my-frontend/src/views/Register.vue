@@ -7,10 +7,6 @@
         <input v-model="username" type="text" required />
       </div>
       <div>
-        <label>Email:</label>
-        <input v-model="email" type="email" required />
-      </div>
-      <div>
         <label>Password:</label>
         <input v-model="password" type="password" required />
       </div>
@@ -30,7 +26,6 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 
 const username = ref("");
-const email = ref("");
 const password = ref("");
 const error = ref("");
 const success = ref("");
@@ -42,7 +37,6 @@ const registerUser = async () => {
   try {
     await axios.post("http://localhost:8000/auth/register", {
       username: username.value,
-      email: email.value,
       password: password.value,
     });
     success.value = "Registration successful! Redirecting to login...";

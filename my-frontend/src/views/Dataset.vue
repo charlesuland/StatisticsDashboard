@@ -6,10 +6,10 @@
       <input type="file" @change="onFileChange" />
       <div style="margin-top:10px;">
         <label for="customName">Custom filename (optional):</label>
-        <input id="customName" v-model="customName" type="text" placeholder="my_dataset.csv" />
+        <input id="customName" v-model="customName" type="text" placeholder="my_dataset.csv"  />
         <div v-if="customName && !isCustomNameValid" style="color: #e74c3c; margin-top:6px">Invalid filename — use letters, numbers, spaces, . _ - and max 100 chars. No slashes.</div>
       </div>
-      <button @click="uploadFile" :disabled="!selectedFile || (customName && !isCustomNameValid)">Upload</button>
+      <button @click="uploadFile" :disabled="!selectedFile || (customName !== '' && !isCustomNameValid)">Upload</button>
       <p v-if="uploadStatus" class="status">{{ uploadStatus }}</p>
     </div>
 
