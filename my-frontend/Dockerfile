@@ -2,11 +2,8 @@
 FROM node:20-alpine as build
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk update && apk add \
+    git 
 
 WORKDIR /app
 RUN git clone https://github.com/charlesuland/StatisticsDashboard.git

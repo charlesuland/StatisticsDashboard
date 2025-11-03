@@ -18,6 +18,17 @@ from sqlalchemy.orm import Session
 
 router = APIRouter()
 
+# Mapping from frontend model names to SQLAlchemy tables
+MODEL_TABLES = {
+    "linear_regression": LinearRegressionModel,
+    "logistic_regression": LogisticRegressionModel,
+    "decision_tree": DecisionTreeModel,
+    "random_forest": RandomForestModel,
+    "svm": SVMModel,
+    "bagging": BaggingModel,
+    "boosting": BoostingModel,
+    "custom_dnn": UserDefinedDNNModel,
+}
 
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 
@@ -185,8 +196,10 @@ async def model_eval(
     manager = ml.models[model_name](df, test_split, **model_params)
     result = manager.train(target, features)
 
-    # Dynamically get SQLAlchemy table
-    model_table_class = DefaultModel
+    # Get SQLAlchemy model/table class from mapping
+    model_table_class = MODEL_TABLES.get(model_name)
+    if model_table_class is None:
+        raise HTTPException(status_code=400, detail=f"No DB table mapped for model: {model_name}")
 
     # Save configuration and results to the specific model table
     model_entry = model_table_class(
@@ -204,7 +217,6 @@ async def model_eval(
     db.refresh(model_entry)
 
     # Return the result to the frontend
-    # raise HTTPException(status_code=404, detail="Processed file not found")
 
 
     # find dataset record (create if missing)

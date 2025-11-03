@@ -9,8 +9,7 @@ from . import ModelManager
 
 class BaggingManager(ModelManager):
     def __init__(self, dataframe: pd.DataFrame, test_split, n_estimators: int = 10, max_samples: float | int = 1.0, random_state: int = 42, classifier: bool = False, cv_folds: int = 5):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.n_estimators = n_estimators
         self.max_samples = max_samples
         self.random_state = random_state
@@ -18,8 +17,7 @@ class BaggingManager(ModelManager):
         self.cv_folds = cv_folds
 
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        X, y = self.prepare_xy(features, target, classifier=self.classifier)
 
         # Cross-validation summary
         if self.classifier:

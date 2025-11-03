@@ -31,8 +31,7 @@ class DecisionTreeManager(ModelManager):
         classifier: bool = False,
         cv_folds: int = 5,
     ):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.random_state = random_state
@@ -40,8 +39,7 @@ class DecisionTreeManager(ModelManager):
         self.cv_folds = cv_folds
 
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        X, y = self.prepare_xy(features, target, classifier=self.classifier)
 
         # Cross-validation summary
         if self.classifier:

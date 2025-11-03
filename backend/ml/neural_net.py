@@ -22,8 +22,7 @@ class NeuralNetManager(ModelManager):
         classifier: bool = False,
         cv_folds: int = 5,
     ):
-        self.df = self.sanitize(dataframe)
-        self.test_split = test_split / 100
+        super().__init__(dataframe, test_split)
         self.hidden_layer_sizes = hidden_layer_sizes
         self.activation = activation
         self.solver = solver
@@ -34,8 +33,7 @@ class NeuralNetManager(ModelManager):
         self.cv_folds = cv_folds
 
     def train(self, target, features):
-        X = self.df[features].copy()
-        y = self.df[target].copy()
+        X, y = self.prepare_xy(features, target, classifier=self.classifier)
 
         # cross-validate
         if self.classifier:
