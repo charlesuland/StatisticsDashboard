@@ -13,7 +13,7 @@ import pandas as pd
 from auth_routes import get_current_user
 from database import SessionLocal, get_db
 import ml
-from models import Dataset, DefaultModel, Plot, User
+from models import Dataset, DefaultModel, Plot, User, LinearRegressionModel, LogisticRegressionModel, DecisionTreeModel, RandomForestModel, SVMModel, BaggingModel, BoostingModel, UserDefinedDNNModel
 from sqlalchemy.orm import Session
 
 router = APIRouter()
