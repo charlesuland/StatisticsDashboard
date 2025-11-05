@@ -10,7 +10,7 @@
         <div v-if="customName && !isCustomNameValid" style="color: #e74c3c; margin-top:6px">Invalid filename — use letters, numbers, spaces, . _ - and max 100 chars. No slashes.</div>
       </div>
       <button @click="uploadFile" :disabled="!selectedFile || (customName !== '' && !isCustomNameValid)">Upload</button>
-      <p v-if="uploadStatus" class="status">{{ uploadStatus }}</p>
+      <p v-if="uploadStatus" :class="uploadStatusClass">{{ uploadStatus }}</p>
     </div>
 
     <!-- Current Datasets -->
@@ -35,6 +35,7 @@ import axios from 'axios';
 const selectedFile = ref(null);
 const customName = ref('');
 const uploadStatus = ref('');
+const uploadStatusClass = ref('status');
 const files = ref([]);
 const counts = ref({});
 const token = localStorage.getItem("token"); 
@@ -78,12 +79,14 @@ async function uploadFile() {
     );
 
   uploadStatus.value = `Upload successful: ${response.data.filename}`;
+  uploadStatusClass.value = 'status success';
   // clear selection and custom name
   selectedFile.value = null;
   customName.value = '';
   } catch (error) {
     console.error(error);
     uploadStatus.value = 'Upload failed';
+    uploadStatusClass.value = 'status error';
   }
   getDatasets();
 }
@@ -167,6 +170,13 @@ async function getDatasets() {
 .status {
   margin-top: 10px;
   font-weight: bold;
+}
+
+.status.error {
+  color: #e74c3c;
+}
+
+.status.success {
   color: #2ecc71;
 }
 

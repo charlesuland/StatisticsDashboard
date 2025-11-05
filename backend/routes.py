@@ -93,9 +93,24 @@ async def add_user_dataset(
             # Assuming you have a detect_delimiter function
             delimiter = await detect_delimiter(file)
         df = pd.read_csv(file.file, delimiter=delimiter)
-    elif ext.lower() == ".xlsx" or ext.lower() == ".xls":
-        df = pd.read_excel(file.file)
-        delimiter = None
+    elif ext.lower() == ".xlsx":
+        # pandas may require an explicit engine for xlsx (openpyxl). Provide a helpful error if missing.
+        try:
+            df = pd.read_excel(file.file, engine='openpyxl')
+            delimiter = None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Failed to read .xlsx file: openpyxl engine required. Ensure 'openpyxl' is installed on the server.")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
+    elif ext.lower() == ".xls":
+        # older Excel format; try using xlrd if available
+        try:
+            df = pd.read_excel(file.file, engine='xlrd')
+            delimiter = None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Failed to read .xls file: xlrd engine required. Ensure 'xlrd' is installed on the server.")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read Excel (.xls) file: {e}")
 
     # Basic schema and type checks
     schema_info = {col: str(dtype) for col, dtype in zip(df.columns, df.dtypes)}

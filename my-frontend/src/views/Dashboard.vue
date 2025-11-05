@@ -12,6 +12,9 @@
           <div class="card widget">
             <h3>Your Datasets</h3>
             <p class="muted">Click a dataset to see its models</p>
+            <div class="widget-actions">
+              <button class="add-dataset-btn" @click="goToAddDataset">Add Dataset</button>
+            </div>
             <ul class="dataset-list">
               <li v-for="(d, i) in datasets" :key="d" @click="selectDataset(d)"
                 :class="{ selected: d === selectedDataset }">
@@ -24,6 +27,10 @@
           <div class="card widget">
             <h3>Models for: <span class="dataset-name">{{ selectedDataset || '—' }}</span></h3>
             <p class="muted">Select a dataset to load models</p>
+            <div class="widget-actions">
+              <button class="train-dataset-btn" @click="goToTrain">Train Model</button>
+              <button class="compare-dataset-btn" @click="goToModels">Compare Models</button>
+            </div>
             <ul class="model-list">
               <li v-for="m in models" :key="m" class="model-item">
                 <router-link :to="`dashboard/model/${selectedDataset}/${m}`">{{ m }}</router-link>
@@ -83,6 +90,25 @@
 
 .widget {
   padding: 18px
+}
+
+.widget-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.add-dataset-btn, .train-dataset-btn, .compare-dataset-btn {
+  padding: 6px 10px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.add-dataset-btn:hover, .train-dataset-btn:hover, .compare-dataset-btn:hover {
+  opacity: 0.95;
 }
 
 .dataset-list,
@@ -191,4 +217,21 @@ async function selectDataset(name) {
 }
 
 onMounted(fetchDatasets)
+
+function goToAddDataset() {
+  // navigate to the dataset upload/list page
+  router.push({ path: '/dashboard/datasets' });
+}
+
+function goToTrain() {
+  // if a dataset is selected, prefill the filename query param
+  if (selectedDataset.value) router.push({ path: '/dashboard/modelevaluation', query: { filename: selectedDataset.value } });
+  else router.push({ path: '/dashboard/modelevaluation' });
+}
+
+function goToModels() {
+  // navigate to models page; if dataset selected, include it so page can pre-filter
+  if (selectedDataset.value) router.push({ path: '/dashboard/models', query: { dataset: selectedDataset.value } });
+  else router.push({ path: '/dashboard/models' });
+}
 </script>

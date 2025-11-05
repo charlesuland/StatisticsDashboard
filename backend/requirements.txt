@@ -7,3 +7,5 @@ python-jose
 shap
 scikit-learn
 matplotlib
+openpyxl
+xlrd

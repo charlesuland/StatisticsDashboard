@@ -143,6 +143,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 import ModelMetrics from '../components/ModelMetrics.vue'
+import { useRoute } from 'vue-router'
 
 const datasets = ref([]);
 const selectedDataset = ref("");
@@ -221,12 +222,39 @@ function buildResultsFromModel(m) {
   return dr
 }
 
+// Safely parse a model identifier into a numeric id
+function parseModelId(m) {
+  if (m == null) return NaN;
+  if (typeof m === 'number') return m;
+  if (typeof m === 'string') {
+    // if string contains underscore like "type_123", take last segment
+    const parts = m.split('_');
+    const last = parts[parts.length - 1];
+    if (/^\d+$/.test(last)) return parseInt(last, 10);
+    if (/^\d+$/.test(m)) return parseInt(m, 10);
+    const asNum = parseInt(m, 10);
+    if (!isNaN(asNum)) return asNum;
+    return NaN;
+  }
+  if (typeof m === 'object') {
+    if ('id' in m && Number.isInteger(m.id)) return m.id;
+    if ('model_id' in m && Number.isInteger(m.model_id)) return m.model_id;
+    if (m.id && /^\d+$/.test(String(m.id))) return parseInt(String(m.id), 10);
+    if (m.model_id && /^\d+$/.test(String(m.model_id))) return parseInt(String(m.model_id), 10);
+  }
+  return NaN;
+}
+
 // Compare two selected models
 async function compareModels() {
-  if (selectedModels.value.length !== 2) return;
+  if (!selectedModels.value || selectedModels.value.length !== 2) return;
 
   try {
-    const modelIds = selectedModels.value.map(m => parseInt(m.split("_").pop()));
+    const modelIds = selectedModels.value.map(parseModelId).filter(id => !isNaN(id));
+    if (modelIds.length !== 2) {
+      console.warn('Could not parse two valid model ids for comparison', selectedModels.value);
+      return;
+    }
 
     // Build repeated query params: model_ids=1&model_ids=2
     const params = new URLSearchParams();
@@ -236,20 +264,20 @@ async function compareModels() {
     });
 
     // backend may return dataset1/dataset2 or an array; normalize to array and filter undefined
-    let r = []
+    let r = [];
     if (Array.isArray(response.data)) {
-      r = response.data.slice()
+      r = response.data.slice();
     } else {
-      if (response.data.dataset1) r.push(response.data.dataset1)
-      if (response.data.dataset2) r.push(response.data.dataset2)
+      if (response.data.dataset1) r.push(response.data.dataset1);
+      if (response.data.dataset2) r.push(response.data.dataset2);
       // fallback: if keys not present but a top-level object exists, try to use it
-      if (r.length === 0 && response.data) r.push(response.data)
+      if (r.length === 0 && response.data) r.push(response.data);
     }
 
     // attach shaped metrics data used by ModelMetrics (guard against undefined)
-    r = r.filter(m => m !== undefined && m !== null)
-    r.forEach(m => { if (m) m._metricsData = buildResultsFromModel(m) })
-    comparisonResult.value = r
+    r = r.filter(m => m !== undefined && m !== null);
+    r.forEach(m => { if (m) m._metricsData = buildResultsFromModel(m); });
+    comparisonResult.value = r;
   } catch (error) {
     console.error("Failed to compare models:", error);
   }
@@ -259,6 +287,30 @@ async function compareModels() {
 const formatKey = (key) => key.replace(/_/g, " ").toUpperCase();
 
 onMounted(fetchDatasets);
+// If model_ids are present in the query, pre-select and run comparison
+const route = useRoute()
+onMounted(() => {
+  const ids = route.query.model_ids;
+  if (!ids) return;
+
+  let arr = [];
+  if (Array.isArray(ids)) arr = ids.slice();
+  else if (typeof ids === 'string') {
+    // comma or single-separated string
+    arr = ids.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  if (arr.length === 2) {
+    selectedModels.value = arr.map(String);
+    if (route.query.dataset) {
+      selectedDataset.value = route.query.dataset;
+      // load available models for this dataset, then compare
+      nextTick(async () => { await onDatasetChange(); compareModels(); });
+    } else {
+      nextTick(() => compareModels());
+    }
+  }
+})
 </script>
 
 <style scoped>
