@@ -82,7 +82,15 @@ const hasPredictions = () => {
 }
 
 const hasMetrics = (result) => {
-  return result && ("r2" in result || "mse" in result || "mae" in result || (result.metrics && Object.keys(result.metrics).length))
+  if (!result) return false
+  // for classifiers, look for classification metrics
+  if (isClassifier.value) {
+    return (
+      ("roc_auc" in result) || ("pr_auc" in result) || ("accuracy" in result) || (result.metrics && ("roc_auc" in result.metrics || "accuracy" in result.metrics || Object.keys(result.metrics).length))
+    )
+  }
+  // regressors: look for r2/mse/mae or any metrics
+  return ("r2" in result || "mse" in result || "mae" in result || (result.metrics && Object.keys(result.metrics).length))
 }
 
 const modelPrettyMap = {
@@ -137,9 +145,21 @@ function plotId(idx) { return `plot-${uid}-${idx}` }
 function buildTables(results) {
   // Metrics
   const metricsData = []
-  if (results.r2 !== undefined) metricsData.push({ metric: 'R²', value: results.r2 })
-  if (results.mse !== undefined) metricsData.push({ metric: 'MSE', value: results.mse })
-  if (results.mae !== undefined) metricsData.push({ metric: 'MAE', value: results.mae })
+  if (isClassifier.value) {
+    if (results.accuracy !== undefined) metricsData.push({ metric: 'Accuracy', value: results.accuracy })
+    if (results.roc_auc !== undefined) metricsData.push({ metric: 'ROC AUC', value: results.roc_auc })
+    if (results.pr_auc !== undefined) metricsData.push({ metric: 'PR AUC', value: results.pr_auc })
+    // include any contained metrics object values (precision/recall etc.)
+    if (results.metrics && typeof results.metrics === 'object') {
+      for (const k of ['precision', 'recall', 'f1']) {
+        if (results.metrics[k] !== undefined) metricsData.push({ metric: k.toUpperCase(), value: results.metrics[k] })
+      }
+    }
+  } else {
+    if (results.r2 !== undefined) metricsData.push({ metric: 'R²', value: results.r2 })
+    if (results.mse !== undefined) metricsData.push({ metric: 'MSE', value: results.mse })
+    if (results.mae !== undefined) metricsData.push({ metric: 'MAE', value: results.mae })
+  }
 
   // create metrics table only if container exists
   {
@@ -156,10 +176,15 @@ function buildTables(results) {
 
   // CV
   const cvData = [
-    { metric: 'R²', mean: results.cv_mean?.r2_mean ?? null, std: results.cv_std?.r2_std ?? null },
-    { metric: 'MSE', mean: results.cv_mean?.mse_mean ?? null, std: results.cv_std?.mse_std ?? null },
-    { metric: 'MAE', mean: results.cv_mean?.mae_mean ?? null, std: results.cv_std?.mae_std ?? null },
   ]
+  if (isClassifier.value) {
+    cvData.push({ metric: 'ROC AUC', mean: results.cv_mean?.roc_auc_mean ?? results.cv_mean?.roc_auc ?? null, std: results.cv_std?.roc_auc_std ?? null })
+    cvData.push({ metric: 'Accuracy', mean: results.cv_mean?.accuracy_mean ?? results.cv_mean?.accuracy ?? null, std: results.cv_std?.accuracy_std ?? null })
+  } else {
+    cvData.push({ metric: 'R²', mean: results.cv_mean?.r2_mean ?? null, std: results.cv_std?.r2_std ?? null })
+    cvData.push({ metric: 'MSE', mean: results.cv_mean?.mse_mean ?? null, std: results.cv_std?.mse_std ?? null })
+    cvData.push({ metric: 'MAE', mean: results.cv_mean?.mae_mean ?? null, std: results.cv_std?.mae_std ?? null })
+  }
   // cross-validation table — only build if element exists
   {
     const el = document.getElementById(cvId)

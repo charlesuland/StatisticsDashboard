@@ -355,6 +355,43 @@ async def model_eval(
 
     result["plots"] = saved_plots
     result["plot_data"] = plot_data
+
+    # Attach model metadata so frontend can render appropriately
+    try:
+        # include parameters/config if available
+        result["parameters"] = saved_params if saved_params is not None else {}
+    except Exception:
+        result["parameters"] = {}
+
+    try:
+        result["model_type"] = model_name
+    except Exception:
+        result["model_type"] = None
+
+    # Determine is_classifier: prefer explicit flags on manager or parameters; fallback to heuristics
+    try:
+        is_cl = False
+        # if parameters provided by frontend include a classifier flag
+        if isinstance(saved_params, dict) and saved_params.get("classifier") is not None:
+            is_cl = bool(saved_params.get("classifier"))
+        # if manager has an attribute, prefer that
+        elif hasattr(manager, "is_classifier"):
+            try:
+                is_cl = bool(getattr(manager, "is_classifier"))
+            except Exception:
+                is_cl = False
+        # fallback: if ROC was computed, treat as classifier
+        elif "roc_auc" in result or "roc_curve" in result:
+            is_cl = True
+        else:
+            # heuristics from model name
+            mn = str(model_name).lower()
+            if any(k in mn for k in ["logistic", "svc", "svm", "forest", "random", "decision", "bagging", "boosting", "classifier", "neural", "dnn"]):
+                is_cl = True
+        result["is_classifier"] = is_cl
+    except Exception:
+        result["is_classifier"] = False
+
     return result
 
 @router.get("/dashboard/datasets/columns")

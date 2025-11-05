@@ -506,7 +506,32 @@ async function submitOptions() {
       errorMessage.value = response.data.error;
     } else {
       // Assign the response data to a variable first
-      const results = response.data;
+      const results = response.data || {};
+
+      // Normalize response for ModelMetrics compatibility
+      // ensure parameters exist (backend may return under different keys)
+      results.parameters = results.parameters ?? results.config ?? results.params ?? {};
+
+      // ensure model_type is present
+      results.model_type = results.model_type ?? selectedModel.value ?? null;
+
+      // ensure is_classifier flag is explicit for the frontend
+      if (results.is_classifier === undefined) {
+        // prefer explicit parameter flag
+        if (results.parameters && typeof results.parameters === 'object' && results.parameters.classifier !== undefined) {
+          results.is_classifier = !!results.parameters.classifier;
+        } else if (results.metrics && (results.metrics.roc_auc !== undefined || results.metrics.pr_auc !== undefined)) {
+          results.is_classifier = true;
+        } else if (typeof results.model_type === 'string') {
+          const mn = results.model_type.toLowerCase();
+          results.is_classifier = /logistic|svc|svm|forest|random|decision|bagging|boosting|classifier|neural|dnn/.test(mn);
+        } else {
+          results.is_classifier = false;
+        }
+      }
+
+      // ensure predictions (compatibility) — backend may return at top-level or under metrics
+      results.predictions = results.predictions ?? results.metrics?.predictions ?? results.metrics?.preds ?? results.predictions ?? undefined;
 
       // Assign results; ModelMetrics component will render tables and plots
       modelResults.value = results;
