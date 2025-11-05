@@ -111,11 +111,26 @@ function humanizeModelType(t) {
 const prettyModelType = computed(() => humanizeModelType(data.model_type))
 
 const isClassifier = computed(() => {
+  // explicit parameter flag wins
   if (data && data.parameters && typeof data.parameters === 'object' && 'classifier' in data.parameters) return !!data.parameters.classifier
+  // explicit is_classifier flag
   if (data && data.is_classifier !== undefined) return !!data.is_classifier
-  if (data && data.model_type) return classifierModelTypes.includes(data.model_type)
+  // try model_type string matching (case-insensitive, substring checks)
+  try {
+    const mt = (data && data.model_type) ? String(data.model_type).toLowerCase() : ''
+    if (mt) {
+      const keys = ['logistic', 'classifier', 'decision_tree', 'random_forest', 'randomforest', 'svm', 'svc', 'bagging', 'boosting', 'dnn', 'neural']
+      for (const k of keys) if (mt.includes(k)) return true
+      // also check known exact names
+      if (classifierModelTypes.includes(mt)) return true
+    }
+  } catch (e) {
+    // ignore and fall through
+  }
   return false
 })
+
+const isRegression = computed(() => !isClassifier.value)
 
 function plotId(idx) { return `plot-${uid}-${idx}` }
 

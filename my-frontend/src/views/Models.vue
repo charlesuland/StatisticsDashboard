@@ -147,14 +147,25 @@ function compareSelected() {
 }
 
 .dataset-card {
-    width: 320px;
-    padding: 12px
+    /* flexible cards: allow variable widths, but keep a sensible minimum */
+    flex: 1 1 40%;
+    min-width: 25%;
+    max-width: 50%;
+    padding: 12px;
+    box-sizing: border-box;
 }
 
 .model-item a {
     color: #3b82f6;
     text-decoration: none;
-    cursor: pointer
+    cursor: pointer;
+    /* allow truncation when space is limited */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
 }
 
 .model-item a:hover {
@@ -163,13 +174,29 @@ function compareSelected() {
 
 .created {
     color: #888;
-    margin-left: 6px
+    margin-left: 6px;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .actions-row {
     display: flex;
     gap: 12px;
-    margin-bottom: 12px
+    margin-bottom: 12px;
+}
+
+/* Ensure label contents (checkbox, name, date) stay on one line */
+.model-item label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+/* Allow the link to shrink inside the flex container */
+.model-item label a {
+    flex: 1 1 auto;
+    min-width: 0; /* needed for overflow to work inside flex */
 }
 
 .compare-btn,
@@ -191,6 +218,7 @@ function compareSelected() {
     border-radius: 8px;
     cursor: pointer;
     margin-left: 8px;
+    margin-top: 8px;
 }
 
 .compare-btn:disabled {
