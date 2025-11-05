@@ -19,7 +19,7 @@ from typing import List
 
 router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
+ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx", ".xls"}
 
 @router.get("/")
 def index():
@@ -93,7 +93,7 @@ async def add_user_dataset(
             # Assuming you have a detect_delimiter function
             delimiter = await detect_delimiter(file)
         df = pd.read_csv(file.file, delimiter=delimiter)
-    elif ext.lower() == ".xlsx":
+    elif ext.lower() == ".xlsx" or ext.lower() == ".xls":
         df = pd.read_excel(file.file)
         delimiter = None
 
@@ -373,6 +373,75 @@ def get_column_info(
         raise HTTPException(status_code=500, detail=f"Failed to read config: {e}")
 
 
+
+@router.get("/dashboard/datasets/info")
+def dataset_info(
+    filename: str = Query(..., description="Name of the dataset file"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return simple dataset information: row count and missing values (from config if available).
+    """
+    user_folder = os.path.join("uploads", str(current_user.username))
+    file_path = os.path.join(user_folder, filename + "_processed.csv")
+    config_path = os.path.join("configs", str(current_user.username), filename + "_config.json")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File {filename} not found")
+
+    try:
+        df = pd.read_csv(file_path)
+        row_count = int(df.shape[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading CSV: {str(e)}")
+
+    missing_values = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                cfg = json.load(f)
+            missing_values = cfg.get('missing_values', {})
+        except Exception:
+            missing_values = {}
+
+    return {"row_count": row_count, "missing_values": missing_values}
+
+
+@router.get('/dashboard/datasets/preview')
+def dataset_preview(
+    filename: str = Query(..., description="Name of the dataset file"),
+    n: int = Query(10, description="Number of rows to preview"),
+    current_user: User = Depends(get_current_user),
+):
+    user_folder = os.path.join('uploads', str(current_user.username))
+    file_path = os.path.join(user_folder, filename + '_processed.csv')
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail='File not found')
+    try:
+        df = pd.read_csv(file_path)
+        rows = df.head(n).to_dict(orient='records')
+        return {'rows': rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to read CSV: {e}')
+
+
+@router.get('/dashboard/datasets/download')
+def dataset_download(
+    filename: str = Query(..., description='Name of the dataset file'),
+    current_user: User = Depends(get_current_user)
+):
+    user_folder = os.path.join('uploads', str(current_user.username))
+    file_path = os.path.join(user_folder, filename + '_processed.csv')
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail='File not found')
+    try:
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        return Response(content, media_type='text/csv')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed to read file: {e}')
+
+
 @router.get("/dashboard/datasets/models")
 def fetch_models(
     filename: str,
@@ -479,14 +548,19 @@ def get_model(
 
 
 
-@router.get("/dashboard/plot/{plot_id}")
-def get_plot(plot_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    plot = db.query(Plot).filter(Plot.id == plot_id).first()
-    if not plot:
-        raise HTTPException(status_code=404, detail="Plot not found")
-
-    # Optionally: check if plot belongs to current user
-    if plot.dataset.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not allowed to access this plot")
-
-    return Response(content=plot.image, media_type="image/png")
+@router.get('/dashboard/models')
+def list_models_grouped(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Return all models for the current user grouped by dataset.
+    Response format: { "dataset1.csv": [ { "id": 1, "model_type": "decision_tree", "created_at": "..." }, ... ], ... }
+    """
+    try:
+        models = db.query(DefaultModel).filter(DefaultModel.user_id == current_user.id).order_by(DefaultModel.dataset, DefaultModel.created_at.desc()).all()
+        grouped = {}
+        for m in models:
+            key = m.dataset or 'unknown'
+            entry = { 'id': m.id, 'model_type': m.model_type, 'created_at': m.created_at.isoformat() if getattr(m, 'created_at', None) else None }
+            grouped.setdefault(key, []).append(entry)
+        return grouped
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Error fetching models: {e}')

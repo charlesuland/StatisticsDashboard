@@ -96,53 +96,7 @@
     </div>
 
     <div class="right-column">
-      <!-- Model Results -->
-      <div v-if="modelResults" class="card results-card">
-        <h2>Model Evaluation Results</h2>
-
-        <!-- Metrics -->
-        <section v-if="hasMetrics(modelResults)">
-          <h3>Performance Metrics</h3>
-          <div id="metrics-table"></div>
-        </section>
-
-        <section v-if="modelResults && (modelResults.cv_mean || modelResults.cv_std)">
-          <h3>Cross-Validation</h3>
-          <div id="cv-table"></div>
-        </section>
-
-        <section v-if="modelResults && modelResults.feature_importance && modelResults.feature_importance.length">
-          <h3>Feature Importance</h3>
-          <div id="feature-table"></div>
-        </section>
-
-        <!-- Model Parameters (table) -->
-        <section v-if="modelResults.parameters && Object.keys(modelResults.parameters).length">
-          <h3>Model Parameters</h3>
-          <div id="params-table"></div>
-        </section>
-
-        <!-- Learning Curve -->
-        <section v-if="modelResults.learning_curve">
-          <h3>Learning Curve</h3>
-          <div>
-            <p><strong>Train Sizes:</strong> {{ modelResults.learning_curve.train_sizes.join(", ") }}</p>
-            <p><strong>Train Scores Mean:</strong> {{ modelResults.learning_curve.train_scores_mean.join(", ") }}</p>
-            <p><strong>Test Scores Mean:</strong> {{ modelResults.learning_curve.test_scores_mean.join(", ") }}</p>
-          </div>
-        </section>
-
-        <!-- Client-side Plots -->
-        <section v-if="modelResults.plot_data && modelResults.plot_data.length">
-          <h3>Plots</h3>
-          <div class="plots">
-            <div v-for="(pd, idx) in modelResults.plot_data" :key="pd.key" class="plot-card">
-              <p>{{ pd.name }}</p>
-              <div :id="'plot-' + idx" class="plot-div"></div>
-            </div>
-          </div>
-        </section>
-      </div>
+      <ModelMetrics v-if="modelResults" :data="modelResults" />
     </div>
   </div>
 </template>
@@ -337,12 +291,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 <script setup>
 import { ref, onMounted, computed, reactive, watch, nextTick } from "vue";
 import axios from "axios";
-import Chart from "chart.js/auto";
-import Plotly from 'plotly.js-dist-min';
-import "tabulator-tables/dist/css/tabulator_simple.css";
-import { TabulatorFull as Tabulator } from 'tabulator-tables';
-
-const learningChart = ref(null);
+import ModelMetrics from '../components/ModelMetrics.vue'
 // Reactive state
 const datasets = ref([]);
 const columns = ref([]);
@@ -559,37 +508,8 @@ async function submitOptions() {
       // Assign the response data to a variable first
       const results = response.data;
 
-      // Fetch plot images if any
-      if (results.plots && results.plots.length) {
-        await Promise.all(
-          results.plots.map(async (plot) => {
-            plot.url = await fetchPlotImage(plot.id);
-          })
-        );
-      }
-
-      // Now assign to reactive modelResults
+      // Assign results; ModelMetrics component will render tables and plots
       modelResults.value = results;
-      // Render client-side plots from structured numeric data
-      if (modelResults.value.plot_data && modelResults.value.plot_data.length) {
-        await nextTick();
-        modelResults.value.plot_data.forEach((pd, idx) => {
-          try {
-            renderPlot(pd, idx);
-          } catch (e) {
-            console.error('Failed to render plot', pd.key, e);
-          }
-        });
-      }
-
-      // Build Tabulator tables for results
-      try {
-        await nextTick();
-        buildTables(modelResults.value);
-      } catch (e) {
-        console.error('Failed building tables', e);
-      }
-      // Fetch plot images for each plot in results
     }
   } catch (error) {
     console.error("Failed to submit options:", error);
@@ -598,48 +518,7 @@ async function submitOptions() {
   }
 };
 
-function renderPlot(pd, idx) {
-  const el = document.getElementById('plot-' + idx);
-  if (!el) return;
 
-  const type = pd.type;
-  let data = [];
-  let layout = { margin: { t: 30, b: 40 }, autosize: true };
-
-  if (type === 'roc') {
-    data = [
-      { x: pd.data.fpr, y: pd.data.tpr, mode: 'lines', name: `ROC (AUC=${pd.data.auc || 'n/a'})` },
-      { x: [0, 1], y: [0, 1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false }
-    ];
-    layout.xaxis = { title: 'FPR' };
-    layout.yaxis = { title: 'TPR' };
-  } else if (type === 'pr') {
-    data = [{ x: pd.data.recall, y: pd.data.precision, mode: 'lines', name: `PR (AP=${pd.data.ap || 'n/a'})` }];
-    layout.xaxis = { title: 'Recall' };
-    layout.yaxis = { title: 'Precision' };
-  } else if (type === 'confusion_matrix') {
-    data = [{ z: pd.data.matrix, type: 'heatmap', colorscale: 'Blues' }];
-    layout.xaxis = { title: 'Predicted' };
-    layout.yaxis = { title: 'Actual' };
-  } else if (type === 'learning_curve') {
-    data = [
-      { x: pd.data.train_sizes, y: pd.data.train_scores_mean, mode: 'lines+markers', name: 'Train' },
-      { x: pd.data.train_sizes, y: pd.data.test_scores_mean, mode: 'lines+markers', name: 'Test' }
-    ];
-    layout.xaxis = { title: 'Training Samples' };
-    layout.yaxis = { title: 'Score' };
-  } else if (type === 'feature_importance' || type === 'shap_summary') {
-    const names = pd.data.map(d => d.name);
-    const vals = pd.data.map(d => d.importance ?? d.mean_abs_shap ?? d.value ?? 0);
-    data = [{ x: vals.reverse(), y: names.reverse(), type: 'bar', orientation: 'h' }];
-    layout.xaxis = { title: type === 'shap_summary' ? 'Mean |SHAP value|' : 'Importance' };
-  } else {
-    el.innerText = 'Unsupported plot type: ' + type;
-    return;
-  }
-
-  Plotly.newPlot(el, data, layout, { responsive: true });
-}
 
 // Watch for model change and reset params
 watch(selectedModel, (newModel) => {
@@ -693,192 +572,5 @@ const targetType = computed(() => {
   if (!t) return 'unknown';
   return t;
 });
-const isPrimitive = (val) => val === null || ['string', 'number', 'boolean'].includes(typeof val);
-const isObject = (val) => val && typeof val === 'object' && !Array.isArray(val);
-const isArrayOfObjects = (val) => Array.isArray(val) && val.length > 0 && val.every(v => typeof v === 'object' && !Array.isArray(v));
-const formatKey = (key) => key.replace(/_/g, ' ');
-const getPlotUrl = (plotId) => {
-  return `http://localhost:8000/dashboard/plot/${plotId}`;
-};
-const hasMetrics = (result) => {
-  return result && ("r2" in result || "mse" in result || "mae" in result);
-};
-async function fetchPlotImage(plotId) {
-  const response = await axios.get(`http://localhost:8000/dashboard/plot/${plotId}`, {
-    responseType: 'blob', // important
-    headers: { Authorization: `Bearer ${token}` }
-  });
 
-  return URL.createObjectURL(response.data);
-}
-let chartInstance = null;
-
-// Watch modelResults for when the learning curve becomes available
-watch(modelResults, (newVal) => {
-  if (newVal && newVal.learning_curve && learningChart.value) {
-    if (chartInstance) chartInstance.destroy(); // destroy previous chart if exists
-
-    chartInstance = new Chart(learningChart.value.getContext("2d"), {
-      type: "line",
-      data: {
-        labels: newVal.learning_curve.train_sizes,
-        datasets: [
-          {
-            label: "Training Score",
-            data: newVal.learning_curve.train_scores_mean,
-            borderColor: "blue",
-            fill: false,
-          },
-          {
-            label: "Validation Score",
-            data: newVal.learning_curve.test_scores_mean,
-            borderColor: "orange",
-            fill: false,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: { title: { display: true, text: "Training Set Size" } },
-          y: { title: { display: true, text: "Score" }, min: 0, max: 1 },
-        },
-      },
-    });
-  }
-});
-
-function buildTables(results) {
-  // Metrics
-  const metricsData = [];
-  if (results.r2 !== undefined) metricsData.push({ metric: 'R²', value: results.r2 });
-  if (results.mse !== undefined) metricsData.push({ metric: 'MSE', value: results.mse });
-  if (results.mae !== undefined) metricsData.push({ metric: 'MAE', value: results.mae });
-
-  // Destroy previous table if exists
-  if (window.metricsTable) { window.metricsTable.destroy(); }
-  window.metricsTable = new Tabulator('#metrics-table', {
-    data: metricsData,
-    layout: 'fitColumns',
-    columns: [
-      { title: 'Metric', field: 'metric' },
-      { title: 'Value', field: 'value', hozAlign: 'left', sorter: 'number' },
-    ],
-    movableColumns: true,
-  });
-
-  // Add or update toolbar with export button (avoid duplicates)
-  (function () {
-    const toolbarId = 'metrics-table-toolbar';
-    const metricsEl = document.getElementById('metrics-table');
-    if (!metricsEl) return;
-    let toolbar = document.getElementById(toolbarId);
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.id = toolbarId;
-      toolbar.style.marginBottom = '8px';
-      metricsEl.parentNode.insertBefore(toolbar, metricsEl);
-    } else {
-      toolbar.innerHTML = '';
-    }
-    const btn = document.createElement('button');
-    btn.innerText = 'Export CSV';
-    btn.onclick = () => window.metricsTable.download('csv', 'metrics.csv');
-    toolbar.appendChild(btn);
-  })();
-
-  // CV table
-  const cvData = [
-    { metric: 'R²', mean: results.cv_mean?.r2_mean ?? null, std: results.cv_std?.r2_std ?? null },
-    { metric: 'MSE', mean: results.cv_mean?.mse_mean ?? null, std: results.cv_std?.mse_std ?? null },
-    { metric: 'MAE', mean: results.cv_mean?.mae_mean ?? null, std: results.cv_std?.mae_std ?? null },
-  ];
-  if (window.cvTable) { window.cvTable.destroy(); }
-  window.cvTable = new Tabulator('#cv-table', {
-    data: cvData,
-    layout: 'fitColumns',
-    columns: [
-      { title: 'Metric', field: 'metric' },
-      { title: 'Mean', field: 'mean', sorter: 'number' },
-      { title: 'Std', field: 'std', sorter: 'number' },
-    ],
-  });
-
-  (function () {
-    const toolbarId = 'cv-table-toolbar';
-    const cvEl = document.getElementById('cv-table');
-    if (!cvEl) return;
-    let toolbar = document.getElementById(toolbarId);
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.id = toolbarId;
-      toolbar.style.marginBottom = '8px';
-      cvEl.parentNode.insertBefore(toolbar, cvEl);
-    } else {
-      toolbar.innerHTML = '';
-    }
-    const btn = document.createElement('button');
-    btn.innerText = 'Export CSV';
-    btn.onclick = () => window.cvTable.download('csv', 'cv.csv');
-    toolbar.appendChild(btn);
-  })();
-
-  // Feature importance
-  const feat = (results.feature_importance || []).map(f => ({ feature: f.name, importance: f.importance }));
-  if (window.featureTable) { window.featureTable.destroy(); }
-  window.featureTable = new Tabulator('#feature-table', {
-    data: feat,
-    layout: 'fitColumns',
-    columns: [
-      { title: 'Feature', field: 'feature' },
-      { title: 'Importance', field: 'importance', sorter: 'number' },
-    ],
-  });
-  (function () {
-    const toolbarId = 'feature-table-toolbar';
-    const featEl = document.getElementById('feature-table');
-    if (!featEl) return;
-    let toolbar = document.getElementById(toolbarId);
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.id = toolbarId;
-      toolbar.style.marginBottom = '8px';
-      featEl.parentNode.insertBefore(toolbar, featEl);
-    } else {
-      toolbar.innerHTML = '';
-    }
-    const btn = document.createElement('button');
-    btn.innerText = 'Export CSV';
-    btn.onclick = () => window.featureTable.download('csv', 'feature_importance.csv');
-    toolbar.appendChild(btn);
-  })();
-
-  // Parameters table
-  const params = [];
-  for (const k in results.parameters || {}) params.push({ param: k, value: results.parameters[k] });
-  if (window.paramsTable) { window.paramsTable.destroy(); }
-  window.paramsTable = new Tabulator('#params-table', {
-    data: params,
-    layout: 'fitColumns',
-    columns: [{ title: 'Parameter', field: 'param' }, { title: 'Value', field: 'value' }]
-  });
-  (function () {
-    const toolbarId = 'params-table-toolbar';
-    const paramsEl = document.getElementById('params-table');
-    if (!paramsEl) return;
-    let toolbar = document.getElementById(toolbarId);
-    if (!toolbar) {
-      toolbar = document.createElement('div');
-      toolbar.id = toolbarId;
-      toolbar.style.marginBottom = '8px';
-      paramsEl.parentNode.insertBefore(toolbar, paramsEl);
-    } else {
-      toolbar.innerHTML = '';
-    }
-    const btn = document.createElement('button');
-    btn.innerText = 'Export CSV';
-    btn.onclick = () => window.paramsTable.download('csv', 'parameters.csv');
-    toolbar.appendChild(btn);
-  })();
-}
 </script>

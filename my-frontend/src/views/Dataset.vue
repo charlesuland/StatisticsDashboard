@@ -18,7 +18,10 @@
       <h3>Current Datasets</h3>
       <ul>
         <li v-for="file in files" :key="file" class="dataset-item">
-          {{ file }}
+          <router-link :to="`/dashboard/datasets/${encodeURIComponent(file)}`" class="dataset-link">
+            <div class="dataset-name">{{ file }}</div>
+            <div class="dataset-meta">Models: <strong>{{ counts[file] ?? '-' }}</strong></div>
+          </router-link>
         </li>
       </ul>
     </div>
@@ -33,6 +36,7 @@ const selectedFile = ref(null);
 const customName = ref('');
 const uploadStatus = ref('');
 const files = ref([]);
+const counts = ref({});
 const token = localStorage.getItem("token"); 
 
 // Validation rules
@@ -91,7 +95,19 @@ async function getDatasets() {
     const response = await axios.get("http://localhost:8000/dashboard/datasets", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    files.value = response.data.files;
+    files.value = response.data.files || [];
+    // initialize counts as unknown
+    files.value.forEach(f => counts.value[f] = '-');
+    // fetch model counts for each file
+    for (const f of files.value) {
+      try {
+        const resp = await axios.get('http://localhost:8000/dashboard/datasets/models', { params: { filename: f }, headers: { Authorization: `Bearer ${token}` } });
+        const models = resp.data.models || [];
+        counts.value[f] = models.length;
+      } catch (e) {
+        counts.value[f] = '-';
+      }
+    }
   } catch (error) {
     console.log(error);
   }

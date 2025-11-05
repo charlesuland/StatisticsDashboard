@@ -1,60 +1,43 @@
 <template>
   <div class="ml-dashboard-compare">
-    <div class="left-column card">
-      <h2>Compare Models</h2>
-      <div class="form-group">
-        <label for="dataset-select">Choose a dataset:</label>
-        <select id="dataset-select" v-model="selectedDataset" @change="onDatasetChange">
-          <option disabled value="">-- select a dataset --</option>
-          <option v-for="dataset in datasets" :key="dataset" :value="dataset">
-            {{ dataset }}
-          </option>
-        </select>
-      </div>
+    <div class="selection-row">
+      <div class="left-column card">
+        <h2>Compare Models</h2>
+        <div class="form-group">
+          <label for="dataset-select">Choose a dataset:</label>
+          <select id="dataset-select" v-model="selectedDataset" @change="onDatasetChange">
+            <option disabled value="">-- select a dataset --</option>
+            <option v-for="dataset in datasets" :key="dataset" :value="dataset">
+              {{ dataset }}
+            </option>
+          </select>
+        </div>
 
-      <div class="form-group" v-if="availableModels.length > 0">
-        <label for="model-select">Select two models to compare:</label>
-        <select id="model-select" v-model="selectedModels" multiple>
-          <option v-for="model in availableModels" :key="model" :value="model">
-            {{ model }}
-          </option>
-        </select>
-      </div>
+        <div class="form-group" v-if="availableModels.length > 0">
+          <label for="model-select">Select two models to compare:</label>
+          <select id="model-select" v-model="selectedModels" multiple>
+            <option v-for="model in availableModels" :key="model" :value="model">
+              {{ model }}
+            </option>
+          </select>
+        </div>
 
-      <button class="train-btn" @click="compareModels" :disabled="selectedModels.length !== 2">
-        Compare Models
-      </button>
+        <button class="train-btn" @click="compareModels" :disabled="selectedModels.length !== 2">
+          Compare Models
+        </button>
+      </div>
     </div>
 
-    <div class="right-column">
-      <div v-if="comparisonResult && comparisonResult.length" class="card results-card">
-        <h2>Model Comparison for Dataset: {{ selectedDataset }}</h2>
-
-        <div class="comparison-grid">
-          <div v-for="(model, index) in comparisonResult" :key="index" class="model-card card">
+    <div class="results-row" v-if="comparisonResult && comparisonResult.length">
+      <h2 class="results-title">Model Comparison for Dataset: {{ selectedDataset }}</h2>
+      <div class="results-grid">
+        <div v-for="(model, index) in comparisonResult" :key="index" class="result-col">
+          <div class="model-card card">
             <h3>Model {{ index + 1 }}</h3>
             <p><strong>Type:</strong> {{ model.model_type }}</p>
             <p><strong>ID:</strong> {{ model.model_id }}</p>
             <p><strong>Training time:</strong> {{ model.training_time ?? 'n/a' }}</p>
-
-            <div>
-              <h4>Configuration</h4>
-              <div :id="`config-table-${index}`"></div>
-            </div>
-
-            <div>
-              <h4>Metrics</h4>
-              <div :id="`metrics-table-${index}`"></div>
-            </div>
-
-            <div v-if="model.metrics && (model.metrics.learning_curve || model.metrics.roc_curve || model.metrics.pr_curve)">
-              <h4>Plots</h4>
-              <div class="plots">
-                <div v-if="model.metrics.roc_curve" :id="`plot-roc-${index}`" class="plot-div"></div>
-                <div v-if="model.metrics.pr_curve" :id="`plot-pr-${index}`" class="plot-div"></div>
-                <div v-if="model.metrics.learning_curve" :id="`plot-lc-${index}`" class="plot-div"></div>
-              </div>
-            </div>
+            <ModelMetrics :data="model._metricsData" />
           </div>
         </div>
       </div>
@@ -67,41 +50,99 @@
 
 <style scoped>
 .ml-dashboard-compare {
-  display: grid;
-  grid-template-columns: 360px 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
-  align-items: start;
   padding: 12px;
+  min-height: 100vh;
 }
+
 .card {
   background: var(--card-bg, #ffffff);
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 1px 2px rgba(16,24,40,0.03);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
 }
-.left-column .form-group { margin-bottom: 12px }
-.train-btn { background: var(--accent, #2563eb); color: white; padding: 8px 12px; border-radius: 6px; border: none }
-.results-card { padding: 16px }
-.comparison-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px }
-.model-card { min-height: 260px }
-.plots { display: flex; gap: 8px; flex-wrap: wrap }
-.plot-div { flex: 1 1 280px; min-width: 240px; height: 260px }
+
+.left-column .form-group {
+  margin-bottom: 12px;
+}
+
+.selection-row .left-column {
+  width: 100%;
+}
+
+.selection-row .card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+.train-btn {
+  background: var(--accent, #2563eb);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none
+}
+
+.results-card {
+  padding: 16px
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  /* 50/50 side-by-side */
+  gap: 16px;
+  align-items: start;
+}
+
+.results-row {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.model-card {
+  min-height: 260px
+}
+
+.plots {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap
+}
+
+.plot-div {
+  flex: 1 1 280px;
+  min-width: 240px;
+  height: 260px
+}
 
 /* Make Tabulator tables fit */
-.tabulator { font-size: 13px }
+.tabulator {
+  font-size: 13px
+}
 
-.export-btn { background: #0ea5e9; color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer }
-.export-btn:hover { opacity: 0.9 }
+.export-btn {
+  background: #0ea5e9;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer
+}
 
+.export-btn:hover {
+  opacity: 0.9
+}
 </style>
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import axios from 'axios'
-import Plotly from 'plotly.js-dist-min'
-import "tabulator-tables/dist/css/tabulator_simple.css";
-import {TabulatorFull as Tabulator} from 'tabulator-tables';
+import ModelMetrics from '../components/ModelMetrics.vue'
 
 const datasets = ref([]);
 const selectedDataset = ref("");
@@ -138,96 +179,46 @@ async function onDatasetChange() {
   }
 }
 
-function buildTableForObject(obj, containerId) {
-  function formatValue(v) {
-    if (v === null || v === undefined) return ''
-    if (Array.isArray(v)) {
-      // Keep arrays readable but avoid huge output
-      if (v.length > 20) return JSON.stringify(v.slice(0, 20)) + '...'
-      return JSON.stringify(v)
+function buildResultsFromModel(m) {
+  // defensive: if m is falsy or not an object, return an empty results object
+  if (!m || typeof m !== 'object') {
+    return {
+      parameters: {},
+      r2: undefined,
+      mse: undefined,
+      mae: undefined,
+      cv_mean: undefined,
+      cv_std: undefined,
+      feature_importance: [],
+      learning_curve: undefined,
+      plot_data: []
     }
-    if (typeof v === 'object') {
-      try {
-        const s = JSON.stringify(v)
-        return s.length > 200 ? s.slice(0, 200) + '...' : s
-      } catch (e) {
-        return String(v)
-      }
-    }
-    return String(v)
   }
 
-  const rows = Object.keys(obj || {}).map(k => ({ key: k, value: formatValue(obj[k]) }))
-  // clear container
-  const container = document.getElementById(containerId)
-  if (!container) return
-  container.innerHTML = ''
-  // add small toolbar
-  const toolbar = document.createElement('div')
-  toolbar.style.display = 'flex'
-  toolbar.style.justifyContent = 'flex-end'
-  toolbar.style.marginBottom = '6px'
-  const exportBtn = document.createElement('button')
-  exportBtn.textContent = 'Export CSV'
-  exportBtn.className = 'export-btn'
-  toolbar.appendChild(exportBtn)
-  container.appendChild(toolbar)
-
-  const table = document.createElement('div')
-  container.appendChild(table)
-
-  const tab = new Tabulator(table, {
-    data: rows,
-    layout: 'fitDataFill',
-    columns: [
-      { title: 'Name', field: 'key', headerFilter: 'input' },
-      { title: 'Value', field: 'value' }
-    ],
-    height: '200px',
-    clipboard: true,
-  })
-
-  exportBtn.addEventListener('click', () => {
-    tab.download('csv', `${containerId}.csv`)
-  })
-}
-
-function renderModelPlots(model, index) {
-  // expecting model.metrics.roc_curve = { fpr:[], tpr:[], auc: number }
-  if (model.metrics?.roc_curve) {
-    const r = model.metrics.roc_curve
-    const trace = {
-      x: r.fpr,
-      y: r.tpr,
-      mode: 'lines',
-      name: `ROC (AUC=${(r.auc||0).toFixed(3)})`,
-      line: { color: '#1f77b4' }
-    }
-    const layout = { title: 'ROC Curve', xaxis: { title: 'FPR' }, yaxis: { title: 'TPR' }, margin: { t: 30 } }
-    Plotly.newPlot(`plot-roc-${index}`, [trace], layout, { responsive: true })
+  // shape the model object into the `data` shape expected by ModelMetrics
+  const dr = {
+    parameters: m.parameters || m.config || {},
+    r2: m.metrics?.r2 ?? m.r2,
+    mse: m.metrics?.mse ?? m.mse,
+    mae: m.metrics?.mae ?? m.mae,
+    cv_mean: m.metrics?.cv_mean ?? m.cv_mean,
+    cv_std: m.metrics?.cv_std ?? m.cv_std,
+    feature_importance: m.metrics?.feature_importance ?? m.feature_importance ?? [],
+    learning_curve: m.metrics?.learning_curve ?? m.learning_curve,
+    plot_data: []
   }
 
-  if (model.metrics?.pr_curve) {
-    const p = model.metrics.pr_curve
-    const trace = {
-      x: p.recall,
-      y: p.precision,
-      mode: 'lines',
-      name: `PR`,
-      line: { color: '#ff7f0e' }
-    }
-    const layout = { title: 'Precision-Recall', xaxis: { title: 'Recall' }, yaxis: { title: 'Precision' }, margin: { t: 30 } }
-    Plotly.newPlot(`plot-pr-${index}`, [trace], layout, { responsive: true })
-  }
+  // include metadata
+  dr.model_type = m.model_type || m.type || undefined
+  dr.training_time = m.training_time || undefined
+  dr.dataset = m.dataset || undefined
+  dr.is_classifier = m.parameters?.classifier ?? undefined
 
-  if (model.metrics?.learning_curve) {
-    const lc = model.metrics.learning_curve
-    console.log(lc)
-    const traceTrain = { x: lc.train_sizes, y: lc.train_scores_mean, mode: 'lines+markers', name: 'Train' }
-    const traceTest = { x: lc.train_sizes, y: lc.test_scores_mean, mode: 'lines+markers', name: 'Test' }
-    const layout = { title: 'Learning Curve', xaxis: { title: 'Training set size' }, yaxis: { title: 'Score' }, margin: { t: 30 } }
-    Plotly.newPlot(`plot-lc-${index}`, [traceTrain, traceTest], layout, { responsive: true })
-  }
+  if (m.metrics?.roc_curve) dr.plot_data.push({ name: 'ROC Curve', key: 'roc_curve', type: 'roc', data: { fpr: m.metrics.roc_curve.fpr, tpr: m.metrics.roc_curve.tpr, auc: m.metrics.roc_auc ?? m.metrics.roc_curve.auc } })
+  if (m.metrics?.pr_curve) dr.plot_data.push({ name: 'PR Curve', key: 'pr_curve', type: 'pr', data: { recall: m.metrics.pr_curve.recall, precision: m.metrics.pr_curve.precision, ap: m.metrics.pr_auc ?? m.metrics.pr_curve.ap } })
+  if (m.metrics?.learning_curve) dr.plot_data.push({ name: 'Learning Curve', key: 'learning_curve', type: 'learning_curve', data: { train_sizes: m.metrics.learning_curve.train_sizes, train_scores_mean: m.metrics.learning_curve.train_scores_mean, test_scores_mean: m.metrics.learning_curve.test_scores_mean } })
+
+  return dr
 }
 
 // Compare two selected models
@@ -244,17 +235,21 @@ async function compareModels() {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    // backend returns dataset1 and dataset2; normalize to array
-    const r = [response.data.dataset1, response.data.dataset2]
-    comparisonResult.value = r
+    // backend may return dataset1/dataset2 or an array; normalize to array and filter undefined
+    let r = []
+    if (Array.isArray(response.data)) {
+      r = response.data.slice()
+    } else {
+      if (response.data.dataset1) r.push(response.data.dataset1)
+      if (response.data.dataset2) r.push(response.data.dataset2)
+      // fallback: if keys not present but a top-level object exists, try to use it
+      if (r.length === 0 && response.data) r.push(response.data)
+    }
 
-    // Wait for DOM to render tables/plots containers
-    await nextTick()
-    r.forEach((m, i) => {
-      buildTableForObject(m.parameters || m.config || {}, `config-table-${i}`)
-      buildTableForObject(m.metrics || {}, `metrics-table-${i}`)
-      renderModelPlots(m, i)
-    })
+    // attach shaped metrics data used by ModelMetrics (guard against undefined)
+    r = r.filter(m => m !== undefined && m !== null)
+    r.forEach(m => { if (m) m._metricsData = buildResultsFromModel(m) })
+    comparisonResult.value = r
   } catch (error) {
     console.error("Failed to compare models:", error);
   }
@@ -279,7 +274,7 @@ onMounted(fetchDatasets);
   background: #fff;
   padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
 select {
