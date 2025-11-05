@@ -1,6 +1,6 @@
 <template>
   <header class="navbar">
-    <div class="brand">Statistics Dashboard</div>
+    <div class="brand"><router-link class="nav-link" to="/dashboard">Dashboard</router-link></div>
     <nav class="nav-links">
       <router-link to="/dashboard/datasets" class="nav-link">Datasets</router-link>
       <router-link to="/dashboard/modelevaluation" class="nav-link">Model Evaluation</router-link>

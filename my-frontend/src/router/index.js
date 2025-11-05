@@ -6,12 +6,14 @@ import ModelEvaluation from '@/views/ModelEvaluation.vue';
 import Login from '@/views/Login.vue';
 import Register from '@/views/Register.vue';
 import CompareModels from '@/views/CompareModels.vue';
+import ModelDetail from '@/views/ModelDetail.vue';
 
 const routes = [
     {path: "/", component: Index },
     {path: '/dashboard', component: Dashboard},
     {path: '/dashboard/datasets', component: Dataset},
     {path: '/dashboard/modelevaluation', component: ModelEvaluation},
+    {path: '/dashboard/model/:dataset/:modelId', name: 'ModelDetail', component: ModelDetail, props: true},
     {path: '/login', component: Login},
     {path: '/register', component: Register},
     {path: '/dashboard/comparemodels', component: CompareModels},

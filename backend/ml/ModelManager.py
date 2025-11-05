@@ -6,6 +6,7 @@ import pandas as pd
 import pandas.api.types as ptypes
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import learning_curve
+from sklearn.preprocessing import StandardScaler
 
 try:
     import shap  # optional
@@ -135,6 +136,51 @@ class ModelManager(metaclass=ABCMeta):
         else:
             inferred_classifier = bool(classifier)
 
+        # If a truth_spec is provided on the manager, apply it to coerce target to binary
+        truth_spec = getattr(self, 'truth_spec', None)
+        if inferred_classifier and truth_spec:
+            try:
+                op = truth_spec.get('operator')
+                val = truth_spec.get('value')
+                # Decide whether to parse value as number
+                parsed_val = None
+                try:
+                    parsed_val = float(val)
+                except Exception:
+                    parsed_val = val
+
+                # Build boolean mask according to operator
+                if op in ('==', '!='):
+                    if op == '==':
+                        mask = y_s == parsed_val
+                    else:
+                        mask = y_s != parsed_val
+                else:
+                    # comparison operators: ensure numeric comparison
+                    y_num = pd.to_numeric(y_s, errors='coerce')
+                    if pd.isna(parsed_val):
+                        # cannot compare numeric if parsed_val not numeric; fallback to equality
+                        mask = y_s == parsed_val
+                    else:
+                        if op == '>':
+                            mask = y_num > parsed_val
+                        elif op == '>=':
+                            mask = y_num >= parsed_val
+                        elif op == '<':
+                            mask = y_num < parsed_val
+                        elif op == '<=':
+                            mask = y_num <= parsed_val
+                        else:
+                            mask = y_s == parsed_val
+
+                # Map to integer 0/1, treat NaN as False (0)
+                y_s = pd.Series(mask.astype('int').fillna(0).astype('int64'), index=y_s.index)
+                # After coercion, treat as classifier with two classes
+                inferred_classifier = True
+            except Exception as e:
+                # If truth spec fails, log and continue with regular inference
+                print('Warning: failed to apply truth_spec:', e)
+
         # Handle classification targets: map to integer codes if necessary
         if inferred_classifier:
             # If it's numeric already but continuous, we still coerce to categorical
@@ -165,6 +211,17 @@ class ModelManager(metaclass=ABCMeta):
 
         # Ensure X and y indices align and return
         X_df = X_df.reset_index(drop=True)
+        # --- Feature scaling: scale numeric features for all models ---
+        try:
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_df.values)
+            # reconstruct DataFrame to keep column names
+            X_df = pd.DataFrame(X_scaled, columns=X_df.columns, index=X_df.index)
+            # replace any inf/nan introduced by zero-variance columns
+            X_df = X_df.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        except Exception as e:
+            # if scaling fails, fall back to unscaled features but do not crash
+            print("Feature scaling failed, proceeding with unscaled features:", e)
         y_s = y_s.reset_index(drop=True)
         return X_df, y_s
 
@@ -305,7 +362,8 @@ class ModelManager(metaclass=ABCMeta):
                 random_state=42,
                 return_times=False,
             )
-            train_sizes, train_scores, test_scores = lc_res
+            # learning_curve may return extra timing arrays; only take the first three
+            train_sizes, train_scores, test_scores = lc_res[:3]
             out["learning_curve"] = {
                 "train_sizes": train_sizes.tolist(),
                 "train_scores_mean": np.mean(train_scores, axis=1).tolist(),

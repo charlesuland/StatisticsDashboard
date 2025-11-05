@@ -4,15 +4,11 @@ import json
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import os
-<<<<<<< HEAD
 import io
 import matplotlib
 from pydantic import BaseModel
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-=======
-
->>>>>>> c227f5f3727ef270e59bbaae2660d0d0ca9e0870
 from sqlalchemy.orm import Session
 import pandas as pd
 from auth_routes import get_current_user
@@ -22,9 +18,6 @@ from models import Dataset, DefaultModel, Plot, User
 from typing import List
 
 router = APIRouter()
-
-# Mapping from frontend model names to SQLAlchemy tables
-
 
 ALLOWED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 
@@ -81,9 +74,9 @@ async def add_user_dataset(
         )
 
     # Create user-specific uploads folder
-    user_folder = os.path.join("uploads", current_user.username)
+    user_folder = os.path.join("uploads", str(current_user.username))
     os.makedirs(user_folder, exist_ok=True)
-    file_path = os.path.join(user_folder, file.filename)
+    file_path = os.path.join(user_folder, str(file.filename))
 
     # Save uploaded file
     try:
@@ -124,14 +117,14 @@ async def add_user_dataset(
         "missing_values": missing_info
     }
 
-    config_folder = os.path.join("configs", current_user.username)
+    config_folder = os.path.join("configs", str(current_user.username))
     os.makedirs(config_folder, exist_ok=True)
     config_path = os.path.join(config_folder, file.filename + "_config.json")
     with open(config_path, "w") as f:
         json.dump(pipeline_config, f, indent=4)
 
     # Save processed DataFrame without encoding step
-    processed_path = os.path.join(user_folder, file.filename + "_processed.csv")
+    processed_path = os.path.join(user_folder, str(file.filename) + "_processed.csv")
     df.to_csv(processed_path, index=False)
 
     # Remove original raw file
@@ -176,12 +169,13 @@ async def model_eval(
     model_name = body.get("model")
 
     model_params = body.get("params", {})  # hyperparameters
+    truth_spec = body.get("truth_spec")
 
     if not all([filename, target, features, model_name]):
         raise HTTPException(status_code=400, detail="Missing required fields")
 
     # Load processed dataset
-    file_path = os.path.join("uploads", current_user.username, filename + "_processed.csv")
+    file_path = os.path.join("uploads", str(current_user.username), str(filename) + "_processed.csv")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Dataset not found")
     
@@ -192,7 +186,14 @@ async def model_eval(
         raise HTTPException(status_code=400, detail=f"Invalid model: {model_name}")
         
     try:
+        # Instantiate manager and attach truth_spec if provided
         manager = ml.models[model_name](df, test_split, **model_params)
+        if truth_spec:
+            # attach to manager for use during prepare_xy/evaluation
+            try:
+                manager.truth_spec = truth_spec
+            except Exception:
+                pass
         result = manager.train(target, features)
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -203,13 +204,17 @@ async def model_eval(
         raise HTTPException(status_code=400, detail=f"No DB table mapped for model: {model_name}")
 
     # Save configuration and results to the specific model table
+    # include truth_spec in saved parameters for reproducibility
+    saved_params = dict(model_params) if isinstance(model_params, dict) else {}
+    if truth_spec:
+        saved_params['truth_spec'] = truth_spec
+
     model_entry = model_table_class(
         user_id=current_user.id,
         dataset=filename,
         model_type=model_name,
-        parameters=model_params,
+        parameters=saved_params,
         metrics=result,
-        
         created_at=datetime.datetime.utcnow()
     )
 
@@ -333,7 +338,7 @@ def get_columns(
     filename: str = Query(..., description="Name of the dataset file"),
     current_user: User = Depends(get_current_user)
 ):
-    user_folder = os.path.join("uploads", current_user.username)
+    user_folder = os.path.join("uploads", str(current_user.username))
     file_path = os.path.join(user_folder, filename + "_processed.csv")
 
 
@@ -346,6 +351,26 @@ def get_columns(
         return {"columns": columns}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading CSV: {str(e)}")
+
+
+@router.get("/dashboard/datasets/column_info")
+def get_column_info(
+    filename: str = Query(..., description="Name of the dataset file"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return column dtype information from the stored preprocessing config if available.
+    Falls back to empty mapping when no config exists.
+    """
+    config_path = os.path.join("configs", current_user.username, filename + "_config.json")
+    if not os.path.exists(config_path):
+        return {"dtypes": {}}
+    try:
+        with open(config_path, "r") as f:
+            cfg = json.load(f)
+        return {"dtypes": cfg.get("dtypes", {})}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read config: {e}")
 
 
 @router.get("/dashboard/datasets/models")
@@ -384,15 +409,11 @@ def fetch_models(
 
 
 @router.get("/dashboard/compare_models")
-<<<<<<< HEAD
 def compare_models(
     model_ids:  List[int] = Query(), 
     db: Session = Depends(get_db), 
     current_user = Depends(get_current_user)
 ):
-=======
-def compare_models(model_ids: list[int] = Query(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
->>>>>>> c227f5f3727ef270e59bbaae2660d0d0ca9e0870
     """
     Compare two models by their IDs.
     Returns a list of model data suitable for frontend display.
@@ -413,21 +434,48 @@ def compare_models(model_ids: list[int] = Query(...), db: Session = Depends(get_
 
         models_data.append({
             "model_id": model.id,
-<<<<<<< HEAD
-            "model_type": model.model_type,
-            "config": model.parameters,      # dict/json
-            "metrics": model.metrics     # dict/json
-=======
             "model_type": model.model_type,      # e.g., "linear_regression", "decision_tree"
             # training_time may not exist on older records, so use getattr with default
             "training_time": getattr(model, "training_time", None),
             # use stored parameters and metrics columns
             "config": model.parameters,
             "metrics": model.metrics,
->>>>>>> c227f5f3727ef270e59bbaae2660d0d0ca9e0870
         })
 
     return models_data  # <-- return as list instead of dataset1/dataset2
+
+
+@router.get("/dashboard/models/{model_name}")
+def get_model(
+    model_name: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Return a single model record by id for the current user.
+    """
+    # Extract model ID from model_name
+    try:
+        model_id = int(model_name.split("_")[-1])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid model name format")
+
+    model = (
+        db.query(DefaultModel)
+        .filter(DefaultModel.id == model_id, DefaultModel.user_id == current_user.id)
+        .first()
+    )
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model with ID {model_id} not found for user")
+
+    return {
+        "model_id": model.id,
+        "model_type": model.model_type,
+        "training_time": getattr(model, "training_time", None),
+        "parameters": model.parameters,
+        "metrics": model.metrics,
+        "created_at": model.created_at.isoformat() if getattr(model, 'created_at', None) else None,
+    }
 
 
 

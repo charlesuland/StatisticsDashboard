@@ -1,12 +1,18 @@
 <template>
   <div class="ml-dashboard">
+    <div v-if="isTraining" class="training-overlay">
+      <div class="training-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="training-text">Training model — this may take a minute...</div>
+      </div>
+    </div>
     <div class="left-column">
       <!-- Dataset Selection -->
       <div class="card">
         <h2>Dataset Selection</h2>
         <div class="form-group">
           <label for="dataset-select">Choose a dataset:</label>
-          <select id="dataset-select" v-model="selectedDataset" @change="onFileChange">
+          <select id="dataset-select" v-model="selectedDataset" @change="onFileChange" :disabled="isTraining">
             <option disabled value="">-- select a dataset --</option>
             <option v-for="(dataset, index) in datasets" :key="index" :value="dataset">
               {{ dataset }}
@@ -17,22 +23,23 @@
 
         <div class="form-group">
           <label for="columns-select">Select columns:</label>
-          <select id="columns-select" v-model="selectedColumns" multiple>
+          <select id="columns-select" v-model="selectedColumns" multiple :disabled="isTraining">
             <option v-for="(col, index) in columns" :key="index" :value="col">{{ col }}</option>
           </select>
         </div>
 
         <div class="form-group">
           <label for="target-column">Target column:</label>
-          <select id="target-column" v-model="targetColumn">
+          <select id="target-column" v-model="targetColumn" :disabled="isTraining">
             <option disabled value="">-- select target --</option>
             <option v-for="col in columns" :key="col" :value="col">{{ col }}</option>
           </select>
+          <small class="type-hint" v-if="targetColumn">Type: {{ targetType }}</small>
         </div>
 
         <div class="form-group range-group">
           <label for="testSplit">Test set percentage: {{ testSplit }}%</label>
-          <input type="range" id="testSplit" min="10" max="40" v-model="testSplit" />
+          <input type="range" id="testSplit" min="10" max="40" v-model="testSplit" :disabled="isTraining" />
         </div>
       </div>
 
@@ -41,7 +48,7 @@
         <h2>Model Selection</h2>
         <div class="form-group">
           <label for="model">Choose ML Model:</label>
-          <select id="model" v-model="selectedModel">
+          <select id="model" v-model="selectedModel" :disabled="isTraining">
             <option value="" disabled>Select a model</option>
             <option v-for="model in models" :key="model.value" :value="model.value">{{ model.label }}</option>
           </select>
@@ -69,7 +76,21 @@
           </div>
         </div>
 
-        <button :disabled="!canSubmit" @click="submitOptions" class="train-btn">Train Model</button>
+        <!-- Classifier truth specification (moved here) -->
+        <div v-if="showTruthSpec" class="form-group truth-spec">
+          <label>Target truth specification:</label>
+          <div class="truth-row">
+            <span class="target-name">{{ targetColumn }}</span>
+            <select v-model="truthSpec.operator" :disabled="isTraining">
+              <option v-for="op in allowedOperators" :key="op" :value="op">{{ op }}</option>
+            </select>
+            <input v-if="showValueInput" type="text" v-model="truthSpec.value" :disabled="isTraining" />
+          </div>
+          <small class="type-hint" v-if="targetColumn">Type: {{ targetType }}</small>
+          <small class="hint">Treats the target column as true when the expression is satisfied. For numeric columns the input is parsed as number for comparisons.</small>
+        </div>
+
+  <button :disabled="!canSubmit || isTraining" @click="submitOptions" class="train-btn">Train Model</button>
         <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
       </div>
     </div>
@@ -295,6 +316,21 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-webkit-slider-thumb:hover {
   background: #5a67d8;
 }
+
+/* Training overlay */
+.training-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+.training-box { background: white; padding: 20px 28px; border-radius: 10px; display:flex; gap:12px; align-items:center }
+.training-text { font-weight: 600 }
+.spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid #e5e7eb; border-top-color: #667eea; animation: spin 1s linear infinite }
+@keyframes spin { to { transform: rotate(360deg) } }
 </style>
 
 
@@ -319,6 +355,34 @@ const token = localStorage.getItem("token");
 const modelParams = reactive({});
 const errorMessage = ref(null)
 const modelResults = ref(null);
+const isTraining = ref(false)
+// Truth specification state for classifiers
+const truthSpec = reactive({ operator: '==', value: '' });
+
+// Determine column types by fetching the dataset config when columns are loaded
+const columnTypes = ref({});
+
+const allowedOpsNumeric = ['>', '>=', '<', '<=', '==', '!='];
+const allowedOpsCategorical = ['==', '!='];
+
+const allowedOperators = computed(() => {
+  if (!targetColumn.value) return allowedOpsCategorical;
+  const t = columnTypes.value[targetColumn.value];
+  if (!t) return allowedOpsCategorical;
+  if (t.includes('int') || t.includes('float') || t.includes('double') || t.includes('numeric')) return allowedOpsNumeric;
+  return allowedOpsCategorical;
+});
+
+const showValueInput = computed(() => true);
+
+// Show truth spec UI when the selected model is marked classifier-capable or modelParams.classifier === true
+const showTruthSpec = computed(() => {
+  // If a specific model param 'classifier' exists, show when it's checked
+  if (modelParams.hasOwnProperty('classifier')) return !!modelParams.classifier;
+  // Otherwise, show for models that are known classifiers
+  const classifierModels = ['logistic_regression', 'decision_tree', 'random_forest', 'svm', 'bagging', 'boosting', 'custom_dnn'];
+  return classifierModels.includes(selectedModel.value);
+});
 
 // Dataset & column fetching
 async function fetchDatasets() {
@@ -343,6 +407,16 @@ async function fetchColumns() {
   } catch (error) {
     console.error("Failed to fetch columns:", error);
   }
+    // ask backend for column dtype info (from preprocessing config)
+    try {
+      const resp2 = await axios.get('http://localhost:8000/dashboard/datasets/column_info', {
+        params: { filename: selectedDataset.value },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      columnTypes.value = resp2.data.dtypes || {};
+    } catch (e) {
+      columnTypes.value = {};
+    }
 }
 
 function onFileChange() {
@@ -450,6 +524,7 @@ const canSubmit = computed(() => {
 // Submit function
 async function submitOptions() {
   try {
+    isTraining.value = true
     // prepare params copy and normalize DNN hidden layer sizes (comma-separated string -> number[])
     const paramsToSend = JSON.parse(JSON.stringify(modelParams));
     if (selectedModel.value === 'custom_dnn' && paramsToSend.hidden_layer_sizes && typeof paramsToSend.hidden_layer_sizes === 'string') {
@@ -468,6 +543,7 @@ async function submitOptions() {
       test_split: testSplit.value,
       model: selectedModel.value,
       params: paramsToSend,
+      truth_spec: (showTruthSpec.value && truthSpec && truthSpec.operator) ? { ...truthSpec } : undefined,
     };
 
     const response = await axios.post(
@@ -517,6 +593,8 @@ async function submitOptions() {
     }
   } catch (error) {
     console.error("Failed to submit options:", error);
+  } finally {
+    isTraining.value = false
   }
 };
 
@@ -596,6 +674,25 @@ watch(selectedModel, (newModel) => {
     });
   }
 });
+
+watch(targetColumn, (newTarget) => {
+  // reset truthSpec when target changes
+  truthSpec.operator = '==';
+  truthSpec.value = '';
+});
+
+watch(allowedOperators, (ops) => {
+  if (!ops.includes(truthSpec.operator)) {
+    truthSpec.operator = ops[0] || '==';
+  }
+});
+
+const targetType = computed(() => {
+  if (!targetColumn.value) return 'unknown';
+  const t = columnTypes.value[targetColumn.value];
+  if (!t) return 'unknown';
+  return t;
+});
 const isPrimitive = (val) => val === null || ['string', 'number', 'boolean'].includes(typeof val);
 const isObject = (val) => val && typeof val === 'object' && !Array.isArray(val);
 const isArrayOfObjects = (val) => Array.isArray(val) && val.length > 0 && val.every(v => typeof v === 'object' && !Array.isArray(v));
@@ -664,7 +761,7 @@ function buildTables(results) {
     data: metricsData,
     layout: 'fitColumns',
     columns: [
-      { title: 'Metric', field: 'metric', headerFilter: true },
+      { title: 'Metric', field: 'metric' },
       { title: 'Value', field: 'value', hozAlign: 'left', sorter: 'number' },
     ],
     movableColumns: true,
@@ -733,7 +830,7 @@ function buildTables(results) {
     data: feat,
     layout: 'fitColumns',
     columns: [
-      { title: 'Feature', field: 'feature', headerFilter: true },
+      { title: 'Feature', field: 'feature' },
       { title: 'Importance', field: 'importance', sorter: 'number' },
     ],
   });
