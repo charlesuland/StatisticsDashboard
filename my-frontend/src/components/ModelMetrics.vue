@@ -1,14 +1,14 @@
 <template>
   <div class="model-metrics">
     <div class="card results-card">
-        <h2>Model Evaluation Results</h2>
+      <h2>Model Evaluation Results</h2>
 
-        <div class="model-info" v-if="infoAvailable">
-          <div><strong>Model:</strong> {{ prettyModelType }}</div>
-          <div><strong>Classifier:</strong> {{ isClassifier ? 'Yes' : 'No' }}</div>
-          <div v-if="data.training_time"><strong>Training time:</strong> {{ data.training_time }}</div>
-          <div v-if="data.dataset"><strong>Dataset:</strong> {{ data.dataset }}</div>
-        </div>
+      <div class="model-info" v-if="infoAvailable">
+        <div><strong>Model:</strong> {{ prettyModelType }}</div>
+        <div><strong>Classifier:</strong> {{ isClassifier ? 'Yes' : 'No' }}</div>
+        <div v-if="data.training_time"><strong>Training time:</strong> {{ data.training_time }}</div>
+        <div v-if="data.dataset"><strong>Dataset:</strong> {{ data.dataset }}</div>
+      </div>
 
       <section v-if="hasMetrics(data)">
         <h3>Performance Metrics</h3>
@@ -30,14 +30,11 @@
         <div :id="paramsId"></div>
       </section>
 
-      <section v-if="data.learning_curve">
-        <h3>Learning Curve</h3>
-        <canvas v-if="showChart" ref="learningChart" class="learning-chart"></canvas>
-        <div v-else>
-          <p><strong>Train Sizes:</strong> {{ data.learning_curve.train_sizes.join(', ') }}</p>
-          <p><strong>Train Scores Mean:</strong> {{ data.learning_curve.train_scores_mean.join(', ') }}</p>
-          <p><strong>Test Scores Mean:</strong> {{ data.learning_curve.test_scores_mean.join(', ') }}</p>
-        </div>
+      <section v-if="data">
+        <h3>Model Plot</h3>
+        <div :id="mainPlotId" class="main-plot-div"></div>
+        <div v-if="isRegression && !hasPredictions" class="muted">No prediction points were returned by the backend so
+          the best-fit line cannot be shown. To enable this, save predicted and actual values when training.</div>
       </section>
 
       <section v-if="data.plot_data && data.plot_data.length">
@@ -73,6 +70,16 @@ const paramsId = `params-${uid}`
 const learningChart = ref(null)
 let chartInstance = null
 const tableInstances = {}
+const mainPlotId = `main-plot-${uid}`
+
+const hasPredictions = () => {
+  if (!data) return false
+  if (data.predictions && Array.isArray(data.predictions.y_true) && Array.isArray(data.predictions.y_pred)) return true
+  if (Array.isArray(data.y_test) && Array.isArray(data.y_pred)) return true
+  // support alternative keys
+  if (Array.isArray(data.y_true) && Array.isArray(data.y_pred)) return true
+  return false
+}
 
 const hasMetrics = (result) => {
   return result && ("r2" in result || "mse" in result || "mae" in result || (result.metrics && Object.keys(result.metrics).length))
@@ -192,25 +199,36 @@ function renderPlot(pd, idx) {
   let layout = { margin: { t: 30, b: 40 }, autosize: true }
 
   if (type === 'roc') {
-    dataPlot = [{ x: pd.data.fpr, y: pd.data.tpr, mode: 'lines', name: `ROC (AUC=${pd.data.auc || 'n/a'})` }, { x: [0, 1], y: [0, 1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false }]
+    dataPlot = [
+      { x: pd.data.fpr, y: pd.data.tpr, mode: 'lines', name: `ROC (AUC=${pd.data.auc || 'n/a'})`, hovertemplate: 'FPR: %{x:.3f}<br>TPR: %{y:.3f}<extra></extra>' },
+      { x: [0, 1], y: [0, 1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false, hoverinfo: 'none' }
+    ]
     layout.xaxis = { title: 'FPR' }
     layout.yaxis = { title: 'TPR' }
+    layout.legend = { orientation: 'h' }
   } else if (type === 'pr') {
-    dataPlot = [{ x: pd.data.recall, y: pd.data.precision, mode: 'lines', name: `PR (AP=${pd.data.ap || 'n/a'})` }]
+    dataPlot = [
+      { x: pd.data.recall, y: pd.data.precision, mode: 'lines', name: `PR (AP=${pd.data.ap || 'n/a'})`, hovertemplate: 'Recall: %{x:.3f}<br>Precision: %{y:.3f}<extra></extra>' }
+    ]
     layout.xaxis = { title: 'Recall' }
     layout.yaxis = { title: 'Precision' }
+    layout.legend = { orientation: 'h' }
   } else if (type === 'confusion_matrix') {
-    dataPlot = [{ z: pd.data.matrix, type: 'heatmap', colorscale: 'Blues' }]
+    dataPlot = [{ z: pd.data.matrix, type: 'heatmap', colorscale: 'Blues', hovertemplate: 'Predicted: %{x}<br>Actual: %{y}<br>Count: %{z}<extra></extra>' }]
     layout.xaxis = { title: 'Predicted' }
     layout.yaxis = { title: 'Actual' }
   } else if (type === 'learning_curve') {
-    dataPlot = [{ x: pd.data.train_sizes, y: pd.data.train_scores_mean, mode: 'lines+markers', name: 'Train' }, { x: pd.data.train_sizes, y: pd.data.test_scores_mean, mode: 'lines+markers', name: 'Test' }]
+    dataPlot = [
+      { x: pd.data.train_sizes, y: pd.data.train_scores_mean, mode: 'lines+markers', name: 'Train', hovertemplate: 'Samples: %{x}<br>Score: %{y:.3f}<extra></extra>' },
+      { x: pd.data.train_sizes, y: pd.data.test_scores_mean, mode: 'lines+markers', name: 'Test', hovertemplate: 'Samples: %{x}<br>Score: %{y:.3f}<extra></extra>' }
+    ]
     layout.xaxis = { title: 'Training Samples' }
     layout.yaxis = { title: 'Score' }
+    layout.legend = { orientation: 'h' }
   } else if (type === 'feature_importance' || type === 'shap_summary') {
     const names = pd.data.map(d => d.name)
     const vals = pd.data.map(d => d.importance ?? d.mean_abs_shap ?? d.value ?? 0)
-    dataPlot = [{ x: vals.reverse(), y: names.reverse(), type: 'bar', orientation: 'h' }]
+    dataPlot = [{ x: vals.reverse(), y: names.reverse(), type: 'bar', orientation: 'h', hovertemplate: '%{y}: %{x:.4f}<extra></extra>' }]
     layout.xaxis = { title: type === 'shap_summary' ? 'Mean |SHAP value|' : 'Importance' }
   } else {
     el.innerText = 'Unsupported plot type: ' + type
@@ -233,11 +251,11 @@ watch(() => props.data, async (newVal) => {
   }
 
   // learning chart
-  if (newVal.learning_curve && learningChart.value) {
-    if (chartInstance) chartInstance.destroy()
-    chartInstance = new Chart(learningChart.value.getContext('2d'), {
-      type: 'line', data: { labels: newVal.learning_curve.train_sizes, datasets: [{ label: 'Training Score', data: newVal.learning_curve.train_scores_mean, borderColor: 'blue', fill: false }, { label: 'Validation Score', data: newVal.learning_curve.test_scores_mean, borderColor: 'orange', fill: false }] }, options: { responsive: true, scales: { x: { title: { display: true, text: 'Training Set Size' } }, y: { title: { display: true, text: 'Score' }, min: 0, max: 1 } } }
-    })
+  // main plot (ROC for classifiers or predicted vs actual for regressors)
+  try {
+    renderMainPlot(newVal)
+  } catch (e) {
+    console.error('renderMainPlot failed', e)
   }
 }, { immediate: true })
 
@@ -249,8 +267,106 @@ onMounted(async () => {
     if (props.data.plot_data && props.data.plot_data.length) {
       props.data.plot_data.forEach((pd, idx) => { try { renderPlot(pd, idx) } catch (e) { console.error('initial renderPlot', e) } })
     }
+    try { renderMainPlot(props.data) } catch (e) { console.error('initial renderMainPlot', e) }
   }
 })
+
+function renderMainPlot(result) {
+  const el = document.getElementById(mainPlotId)
+  if (!el) return
+  // clear previous
+  el.innerHTML = ''
+
+  // If classifier, prefer ROC curve from plot_data or result.roc_curve
+  if (isClassifier.value) {
+    // try plot_data first
+    const roc = (result.plot_data || []).find(p => p.key === 'roc_curve') || result.roc_curve
+    if (roc) {
+      // multiclass shape: { classes: [...], fpr: [[...],[...]], tpr: [[...],[...]] }
+      const cls = roc.data?.classes || roc.classes || null
+      const fpr = roc.data?.fpr || roc.fpr || []
+      const tpr = roc.data?.tpr || roc.tpr || []
+      const auc = roc.data?.auc ?? result.roc_auc ?? null
+      if (cls && Array.isArray(fpr) && Array.isArray(fpr[0])) {
+        // per-class traces
+        const traces = []
+        for (let i = 0; i < cls.length; i++) {
+          traces.push({ x: fpr[i] || [], y: tpr[i] || [], mode: 'lines', name: `ROC ${cls[i]}`, hovertemplate: 'FPR: %{x:.3f}<br>TPR: %{y:.3f}<extra></extra>' })
+        }
+        traces.push({ x: [0, 1], y: [0, 1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false, hoverinfo: 'none' })
+        const layout = { title: `ROC Curve (AUC=${auc ?? 'n/a'})`, xaxis: { title: 'FPR' }, yaxis: { title: 'TPR' }, margin: { t: 30, b: 40 }, autosize: true, legend: { orientation: 'h' } }
+        Plotly.newPlot(el, traces, layout, { responsive: true })
+        return
+      }
+      // binary or fallback
+      const trace = [
+        { x: fpr, y: tpr, mode: 'lines', name: `ROC (AUC=${auc ?? 'n/a'})`, hovertemplate: 'FPR: %{x:.3f}<br>TPR: %{y:.3f}<extra></extra>' },
+        { x: [0, 1], y: [0, 1], mode: 'lines', line: { dash: 'dash', color: 'gray' }, showlegend: false, hoverinfo: 'none' }
+      ]
+      const layout = { title: 'ROC Curve', xaxis: { title: 'FPR' }, yaxis: { title: 'TPR' }, margin: { t: 30, b: 40 }, autosize: true, legend: { orientation: 'h' } }
+      Plotly.newPlot(el, trace, layout, { responsive: true })
+      return
+    }
+    // no roc data: show message
+    el.innerText = 'ROC data not available for this classifier.'
+    return
+  }
+
+  // Regression: show predicted vs actual scatter + best-fit line if predictions available
+  if (!isClassifier.value) {
+    // find arrays
+    let y_true = null
+    let y_pred = null
+    if (result.predictions && Array.isArray(result.predictions.y_true) && Array.isArray(result.predictions.y_pred)) {
+      y_true = result.predictions.y_true
+      y_pred = result.predictions.y_pred
+    } else if (Array.isArray(result.y_test) && Array.isArray(result.y_pred)) {
+      y_true = result.y_test
+      y_pred = result.y_pred
+    } else if (Array.isArray(result.y_true) && Array.isArray(result.y_pred)) {
+      y_true = result.y_true
+      y_pred = result.y_pred
+    }
+
+    if (!y_true || !y_pred || y_true.length !== y_pred.length) {
+      // fallback: if a learning_curve plot exists, show it; otherwise message
+      const lc = (result.plot_data || []).find(p => p.key === 'learning_curve') || result.learning_curve
+      if (lc && lc.data) {
+        const trace = [
+          { x: lc.data.train_sizes, y: lc.data.train_scores_mean, mode: 'lines+markers', name: 'Train' },
+          { x: lc.data.train_sizes, y: lc.data.test_scores_mean, mode: 'lines+markers', name: 'Test' }
+        ]
+        const layout = { title: 'Learning Curve', xaxis: { title: 'Training samples' }, yaxis: { title: 'Score' }, margin: { t: 30, b: 40 }, autosize: true }
+        Plotly.newPlot(el, trace, layout, { responsive: true })
+        return
+      }
+      el.innerText = 'No prediction points were returned by the backend so the best-fit line cannot be shown.'
+      return
+    }
+
+    // compute best-fit line (least squares)
+    const n = y_true.length
+    const x = y_true.map(v => Number(v))
+    const y = y_pred.map(v => Number(v))
+    const xMean = x.reduce((a, b) => a + b, 0) / n
+    const yMean = y.reduce((a, b) => a + b, 0) / n
+    let num = 0; let den = 0
+    for (let i = 0; i < n; i++) { num += (x[i] - xMean) * (y[i] - yMean); den += (x[i] - xMean) * (x[i] - xMean) }
+    const slope = den === 0 ? 0 : num / den
+    const intercept = yMean - slope * xMean
+
+    // prepare traces: scatter and line
+    const scatter = { x: x, y: y, mode: 'markers', name: 'Predicted vs Actual', marker: { color: 'blue' }, hovertemplate: 'Actual: %{x:.4f}<br>Predicted: %{y:.4f}<extra></extra>' }
+    // best-fit line over range
+    const minX = Math.min(...x); const maxX = Math.max(...x)
+    const lineX = [minX, maxX]
+    const lineY = lineX.map(xv => slope * xv + intercept)
+    const line = { x: lineX, y: lineY, mode: 'lines', name: `Best fit (y=${slope.toFixed(3)}x+${intercept.toFixed(3)})`, line: { color: 'red' }, hovertemplate: 'y=%{y:.4f}<extra></extra>' }
+    const layout = { title: 'Predicted vs Actual (with best-fit)', xaxis: { title: 'Actual' }, yaxis: { title: 'Predicted' }, margin: { t: 30, b: 40 }, autosize: true, legend: { orientation: 'v' } }
+    Plotly.newPlot(el, [scatter, line], layout, { responsive: true })
+    return
+  }
+}
 
 onBeforeUnmount(() => {
   // destroy chart
@@ -264,8 +380,24 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.model-metrics .card { padding: 20px; border-radius: 12px }
-.plots { display:flex; gap:12px; flex-wrap:wrap }
-.plot-div { width: 320px; height: 260px }
-.learning-chart { width: 100%; height: 220px }
+.model-metrics .card {
+  padding: 20px;
+  border-radius: 12px
+}
+
+.plots {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap
+}
+
+.plot-div {
+  width: 320px;
+  height: 260px
+}
+
+.learning-chart {
+  width: 100%;
+  height: 220px
+}
 </style>

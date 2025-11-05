@@ -257,12 +257,21 @@ async def model_eval(
     try:
         if "roc_curve" in result:
             rc = result["roc_curve"]
-            plot_data.append({
-                "name": "ROC Curve",
-                "key": "roc_curve",
-                "type": "roc",
-                "data": {"fpr": rc.get("fpr", []), "tpr": rc.get("tpr", []), "auc": result.get("roc_auc")},
-            })
+            # rc may be binary {fpr:..., tpr:...} or multiclass {classes: [...], fpr: [...], tpr: [...]}.
+            if isinstance(rc, dict) and rc.get('classes') and isinstance(rc.get('fpr'), list):
+                plot_data.append({
+                    "name": "ROC Curve (per-class)",
+                    "key": "roc_curve",
+                    "type": "roc",
+                    "data": {"classes": rc.get('classes', []), "fpr": rc.get('fpr', []), "tpr": rc.get('tpr', []), "auc": result.get("roc_auc")},
+                })
+            else:
+                plot_data.append({
+                    "name": "ROC Curve",
+                    "key": "roc_curve",
+                    "type": "roc",
+                    "data": {"fpr": rc.get("fpr", []), "tpr": rc.get("tpr", []), "auc": result.get("roc_auc")},
+                })
     except Exception:
         pass
 

@@ -215,6 +215,27 @@ function buildResultsFromModel(m) {
   dr.dataset = m.dataset || undefined
   dr.is_classifier = m.parameters?.classifier ?? undefined
 
+  // Copy prediction arrays (if present) so ModelMetrics can render predicted vs actual
+  // Backend may return predictions under m.predictions or m.metrics.predictions or top-level keys
+  const predsSource = m.predictions || m.metrics?.predictions || {};
+  if (predsSource && (Array.isArray(predsSource.y_true) || Array.isArray(predsSource.y_test) || Array.isArray(predsSource.y_pred))) {
+    dr.predictions = {}
+    if (Array.isArray(predsSource.y_true)) dr.predictions.y_true = predsSource.y_true
+    if (Array.isArray(predsSource.y_test)) dr.predictions.y_test = predsSource.y_test
+    // ensure y_true alias exists for frontend compatibility
+    if (!dr.predictions.y_true && dr.predictions.y_test) dr.predictions.y_true = dr.predictions.y_test
+    if (Array.isArray(predsSource.y_pred)) dr.predictions.y_pred = predsSource.y_pred
+  } else {
+    // also support top-level properties on the model object
+    if (Array.isArray(m.y_true) || Array.isArray(m.y_test) || Array.isArray(m.y_pred)) {
+      dr.predictions = {}
+      if (Array.isArray(m.y_true)) dr.predictions.y_true = m.y_true
+      if (Array.isArray(m.y_test)) dr.predictions.y_test = m.y_test
+      if (!dr.predictions.y_true && dr.predictions.y_test) dr.predictions.y_true = dr.predictions.y_test
+      if (Array.isArray(m.y_pred)) dr.predictions.y_pred = m.y_pred
+    }
+  }
+
   if (m.metrics?.roc_curve) dr.plot_data.push({ name: 'ROC Curve', key: 'roc_curve', type: 'roc', data: { fpr: m.metrics.roc_curve.fpr, tpr: m.metrics.roc_curve.tpr, auc: m.metrics.roc_auc ?? m.metrics.roc_curve.auc } })
   if (m.metrics?.pr_curve) dr.plot_data.push({ name: 'PR Curve', key: 'pr_curve', type: 'pr', data: { recall: m.metrics.pr_curve.recall, precision: m.metrics.pr_curve.precision, ap: m.metrics.pr_auc ?? m.metrics.pr_curve.ap } })
   if (m.metrics?.learning_curve) dr.plot_data.push({ name: 'Learning Curve', key: 'learning_curve', type: 'learning_curve', data: { train_sizes: m.metrics.learning_curve.train_sizes, train_scores_mean: m.metrics.learning_curve.train_scores_mean, test_scores_mean: m.metrics.learning_curve.test_scores_mean } })

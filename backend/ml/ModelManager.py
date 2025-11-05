@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Optional
+import os
 
 import numpy as np
 import pandas as pd
@@ -247,6 +248,39 @@ class ModelManager(metaclass=ABCMeta):
         """
         out: dict[str, Any] = {}
 
+        # limit for returned prediction points to avoid huge payloads
+        try:
+            MAX_PRED_POINTS = int(os.environ.get("MAX_PRED_POINTS", "2000"))
+        except Exception:
+            MAX_PRED_POINTS = 2000
+
+        def _to_py_number(v):
+            # convert numpy scalars and numeric-like values to native Python types
+            try:
+                if isinstance(v, (np.integer,)):
+                    return int(v)
+                if isinstance(v, (np.floating,)):
+                    fv = float(v)
+                    return int(fv) if float(fv).is_integer() else fv
+                # try cast to float then decide
+                fv = float(v)
+                return int(fv) if float(fv).is_integer() else fv
+            except Exception:
+                return v
+
+        def _limit_and_convert(seq):
+            # seq may be list/np.ndarray/Series; convert to list then limit length
+            try:
+                lst = list(seq)
+            except Exception:
+                lst = []
+            n = len(lst)
+            if n > MAX_PRED_POINTS and MAX_PRED_POINTS > 0:
+                idx = np.linspace(0, n - 1, MAX_PRED_POINTS, dtype=int)
+                lst = [lst[i] for i in idx]
+            # convert numeric types to Python numbers where possible
+            return [(_to_py_number(v)) for v in lst]
+
         # --------------------------
         # Confusion Matrix (Classifiers)
         # --------------------------
@@ -254,6 +288,18 @@ class ModelManager(metaclass=ABCMeta):
             try:
                 y_pred = model.predict(X_test)
                 out["confusion_matrix"] = confusion_matrix(y_test, y_pred).tolist()
+                # include raw predictions for frontend plotting / diagnostics
+                try:
+                    out.setdefault('predictions', {})
+                    # store both y_test and y_true keys for frontend compatibility
+                    converted_y = _limit_and_convert(y_test.tolist())
+                    converted_pred = _limit_and_convert(y_pred.tolist())
+                    out['predictions']['y_test'] = converted_y
+                    out['predictions']['y_true'] = converted_y
+                    out['predictions']['y_pred'] = converted_pred
+                except Exception:
+                    # if conversion fails, skip predictions
+                    pass
             except Exception as e:
                 print("Confusion matrix failed:", e)
 
@@ -297,17 +343,16 @@ class ModelManager(metaclass=ABCMeta):
                         out["roc_auc"] = float(roc_auc_score(y_test, scores))
                         out["pr_auc"] = float(average_precision_score(y_test, scores))
                     else:
-                        # Multi-class classification
-                        y_true_bin = label_binarize(y_test, classes=classes)
-                        # ROC AUC (One-vs-Rest)
+                        # Multi-class classification: compute per-class ROC curves (one-vs-rest)
                         try:
+                            y_true_bin = label_binarize(y_test, classes=classes)
+                            # macro averaged AUCs
                             out["roc_auc"] = float(
                                 roc_auc_score(y_true_bin, y_proba, average="macro", multi_class="ovr")
                             )
                         except Exception as e:
                             print("Multi-class ROC AUC failed:", e)
                             out["roc_auc"] = None
-                        # Average Precision (macro)
                         try:
                             out["pr_auc"] = float(
                                 average_precision_score(y_true_bin, y_proba, average="macro")
@@ -315,6 +360,20 @@ class ModelManager(metaclass=ABCMeta):
                         except Exception as e:
                             print("Multi-class PR AUC failed:", e)
                             out["pr_auc"] = None
+
+                        # compute per-class fpr/tpr arrays for plotting
+                        try:
+                            per_fpr = []
+                            per_tpr = []
+                            class_list = list(classes)
+                            for i, cls in enumerate(class_list):
+                                fpr_i, tpr_i, _ = roc_curve(y_true_bin[:, i], y_proba[:, i])
+                                per_fpr.append(fpr_i.tolist())
+                                per_tpr.append(tpr_i.tolist())
+                            out["roc_curve"] = {"classes": class_list, "fpr": per_fpr, "tpr": per_tpr}
+                        except Exception as e:
+                            print("Multi-class per-class ROC computation failed:", e)
+                            # leave roc_curve absent in that case
 
             except Exception as e:
                 print("ROC/PR computation failed:", e)
@@ -371,6 +430,20 @@ class ModelManager(metaclass=ABCMeta):
             }
         except Exception as e:
             print("Learning curve computation failed:", e)
+
+        # --------------------------
+        # Save regression predictions (sampled) so frontend can show predicted vs actual
+        # --------------------------
+        if not is_classifier:
+            try:
+                # attempt to compute predictions if model supports it
+                if 'predictions' not in out:
+                    y_pred_reg = model.predict(X_test)
+                    out.setdefault('predictions', {})
+                    out['predictions']['y_true'] = _limit_and_convert(y_test.tolist())
+                    out['predictions']['y_pred'] = _limit_and_convert(y_pred_reg.tolist())
+            except Exception as e:
+                print('Regression prediction saving failed:', e)
 
         # --------------------------
         # SHAP summary (optional)

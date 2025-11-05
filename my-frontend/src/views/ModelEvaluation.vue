@@ -398,7 +398,7 @@ const modelMap = {
         name: "fit_intercept",      // key sent to backend
         label: "Fit Intercept?",    // label shown in UI
         type: "checkbox",             // boolean input 
-        value: true
+        default: true
       },
     ],
   },
